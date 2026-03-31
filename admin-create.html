@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Create Events - EventPortal</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="dashboard.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">EventPortal</div>
+      <nav class="nav">
+        <a href="view-events.html">View Events</a>
+        <a class="active" href="admin-create.html">Create</a>
+        <a href="admin-edit.html">Edit</a>
+        <a href="role.html" id="logoutLink">Logout</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <h1 class="page-title" id="pageTitle">Create Events</h1>
+    <p class="subtext" id="pageSubtext">Admin only</p>
+
+    <section class="panel">
+      <form id="eventForm">
+        <label>Event Name</label>
+        <input id="name" type="text" required>
+
+        <label>Date</label>
+        <input id="date" type="text" placeholder="20 Feb 2026" required>
+
+        <label>Time</label>
+        <input id="time" type="text" placeholder="10:00 AM" required>
+
+        <label>Location</label>
+        <input id="location" type="text" required>
+
+        <label>Total Seats</label>
+        <input id="totalSeats" type="number" min="1" required>
+
+        <label>Description</label>
+        <input id="desc" type="text" required>
+
+        <button id="saveBtn" type="submit">Save Event</button>
+        <p id="msg" class="empty" style="margin-top:10px;"></p>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Edit Events - EventPortal</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="dashboard.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">EventPortal</div>
+      <nav class="nav">
+        <a href="view-events.html">View Events</a>
+        <a href="admin-create.html">Create</a>
+        <a class="active" href="admin-edit.html">Edit</a>
+        <a href="role.html" id="logoutLink">Logout</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <h1 class="page-title">Edit Events</h1>
+    <p class="subtext">Admin only</p>
+
+    <div id="editGrid" class="grid"></div>
+    <p id="emptyMsg" class="empty">Nothing is created.</p>
+  </main>
+</body>
+</html>

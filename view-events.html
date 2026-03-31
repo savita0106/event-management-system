@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>EventPortal - Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="dashboard.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">EventPortal</div>
+
+      <nav class="nav">
+        <a class="active" href="view-events.html">View Events</a>
+
+        <a href="#" id="navReg">Event Registration</a>
+        <a href="#" id="navSeat">Seat Availability</a>
+        <a href="#" id="navWait">Waitlist</a>
+        <a href="#" id="navMy">My Registrations</a>
+
+        <a href="admin-create.html" id="navCreate">Create Events</a>
+        <a href="admin-edit.html" id="navEdit">Edit Events</a>
+        <a href="#" id="navManage">Manage Attendees</a>
+        <a href="#" id="navAna">Analytics</a>
+
+        <a href="role.html" id="logoutLink">Logout</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <h1 class="page-title">Event Details</h1>
+    <p class="subtext" id="welcomeText"></p>
+
+    <section class="panel">
+      <div class="controls">
+        <div class="control" style="flex:1;">
+          <label>Search</label>
+          <input id="searchBox" type="text" placeholder="Type event name or location..." />
+        </div>
+        <div class="control" style="flex:0;">
+          <button class="btn-small" onclick="renderEvents()">Search</button>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div id="eventGrid" class="grid"></div>
+      <p id="emptyMsg" class="empty">Nothing is created.</p>
+    </section>
+  </main>
+</body>
+</html>
