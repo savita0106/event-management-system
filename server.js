@@ -1,17 +1,20 @@
 const express = require('express');
+const path = require('path');
 const mysql = require('mysql2');
 const cors = require('cors');
 
 const app = express();
 
+app.use(express.static(__dirname));
 app.use(cors());
 app.use(express.json());
 
 const db = mysql.createConnection({
-  host: 'localhost',
-  user: 'root',
-  password: '',
-  database: 'eventdb'
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  port: process.env.DB_PORT || 3306
 });
 
 db.connect((err) => {
@@ -23,7 +26,7 @@ db.connect((err) => {
 });
 
 app.get('/', (req, res) => {
-  res.send('event backend running');
+  res.sendFile(path.join(__dirname, 'role.html'));
 });
 
 app.post('/signup', (req, res) => {
@@ -185,6 +188,8 @@ app.post('/register', (req, res) => {
   });
 });
 
-app.listen(3000, () => {
-  console.log('server running at http://localhost:3000');
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`server running on port ${PORT}`);
 });
