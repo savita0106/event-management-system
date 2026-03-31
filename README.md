@@ -29,6 +29,3 @@ https://github.com/savita0106/event-management-system
 - Backend: Node.js, Express
 - Database: MySQL (Railway)
 - Deployment: Render
-
-## Note
-The first load may take a few seconds due to free hosting.
