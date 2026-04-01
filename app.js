@@ -392,18 +392,17 @@ function showTeamRegistrationPrompt(eventId) {
   const teamName = prompt('Enter team name');
   if (!teamName || !teamName.trim()) return;
 
-  const totalMembersInput = prompt('Enter total number of members including you (max 5)');
+  const totalMembersInput = prompt('Enter number of other members only (max 4)');
   if (!totalMembersInput) return;
 
-  const totalMembers = parseInt(totalMembersInput, 10);
+  const otherCount = parseInt(totalMembersInput, 10);
 
-  if (isNaN(totalMembers) || totalMembers < 2 || totalMembers > 5) {
-    alert('Team size must be between 2 and 5');
-    return;
-  }
+if (isNaN(otherCount) || otherCount < 1 || otherCount > 4) {
+  alert('Other members count must be between 1 and 4');
+  return;
+}
 
-  const memberEmails = [];
-const otherCount = totalMembers - 1;
+const memberEmails = [];
 
 for (let i = 1; i <= otherCount; i++) {
   const email = prompt(`Enter email ID of member ${i}`);
