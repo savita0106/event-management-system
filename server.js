@@ -300,9 +300,14 @@ app.get('/admin/attendees/:eventId', (req, res) => {
     select
       r.id as registration_id,
       r.status,
+      r.registered_at,
       u.id as user_id,
       u.username,
-      e.name as event_name
+      u.role,
+      e.name as event_name,
+      e.date as event_date,
+      e.time as event_time,
+      e.location as event_location
     from registrations r
     join users u on r.user_id = u.id
     join events e on r.event_id = e.id

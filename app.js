@@ -50,8 +50,6 @@ function applyNav(role) {
     removeEl('navAna');
   } else if (role === 'admin') {
     removeEl('navReg');
-    removeEl('navSeat');
-    removeEl('navWait');
     removeEl('navMy');
   }
 }
@@ -176,7 +174,22 @@ async function renderEvents() {
         <p><b>Description:</b> ${ev.description || ''}</p>
         <p><b>Total Seats:</b> ${ev.total_seats}</p>
         <p><b>Available Seats:</b> ${ev.available_seats}</p>
-        <p><b>Status:</b> ${Number(ev.available_seats) > 0 ? 'Open' : 'Full / Waitlist'}</p>
+        <p>
+  <b>Status:</b>
+  <span style="
+    display:inline-block;
+    padding:6px 10px;
+    border-radius:999px;
+    font-size:12px;
+    font-weight:700;
+    margin-left:6px;
+    background:${Number(ev.available_seats) > 0 ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)'};
+    color:${Number(ev.available_seats) > 0 ? '#86efac' : '#fca5a5'};
+    border:1px solid ${Number(ev.available_seats) > 0 ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)'};
+  ">
+    ${Number(ev.available_seats) > 0 ? 'Open' : 'Full / Waitlist'}
+  </span>
+</p>
       `;
 
       if (session.role === 'user') {
@@ -505,15 +518,21 @@ async function loadAttendees(eventId, eventName) {
     empty.style.display = 'none';
 
     list.forEach(function (row) {
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.innerHTML = `
-        <h3>${row.username || ''}</h3>
-        <p><b>Status:</b> ${row.status || ''}</p>
-        <p><b>User ID:</b> ${row.user_id || ''}</p>
-      `;
-      listWrap.appendChild(card);
-    });
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `
+    <h3>${row.username || ''}</h3>
+    <p><b>User ID:</b> ${row.user_id || ''}</p>
+    <p><b>Role:</b> ${row.role || ''}</p>
+    <p><b>Registration Status:</b> ${row.status || ''}</p>
+    <p><b>Registered At:</b> ${row.registered_at || ''}</p>
+    <p><b>Event:</b> ${row.event_name || ''}</p>
+    <p><b>Date:</b> ${row.event_date || ''}</p>
+    <p><b>Time:</b> ${row.event_time || ''}</p>
+    <p><b>Location:</b> ${row.event_location || ''}</p>
+  `;
+  listWrap.appendChild(card);
+});
   } catch (err) {
     if (empty) {
       empty.style.display = 'block';
