@@ -17,6 +17,8 @@ const db = mysql.createConnection({
   port: process.env.DB_PORT || 3306
 });
 
+const dbp = db.promise();
+
 db.connect((err) => {
   if (err) {
     console.log('db connection failed', err);
@@ -233,6 +235,141 @@ app.post('/register', (req, res) => {
       }
     });
   });
+});
+
+app.post('/register-team', async (req, res) => {
+  const { event_id, team_name, leader_user_id, member_usernames } = req.body;
+
+  if (!event_id || !team_name || !leader_user_id) {
+    return res.status(400).json({ message: 'Missing required fields' });
+  }
+
+  const otherMembers = Array.isArray(member_usernames) ? member_usernames : [];
+  const cleanedMembers = otherMembers.map(x => String(x || '').trim()).filter(Boolean);
+
+  const uniqueMembers = [...new Set(cleanedMembers.map(x => x.toLowerCase()))];
+
+  if (uniqueMembers.length !== cleanedMembers.length) {
+    return res.status(400).json({ message: 'Duplicate usernames are not allowed' });
+  }
+
+  const totalMembers = 1 + cleanedMembers.length;
+
+  if (totalMembers < 2 || totalMembers > 5) {
+    return res.status(400).json({ message: 'Team size must be between 2 and 5' });
+  }
+
+  try {
+    const [eventRows] = await dbp.query('select * from events where id = ?', [event_id]);
+    if (!eventRows.length) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+
+    const event = eventRows[0];
+
+    if (Number(event.available_seats) < totalMembers) {
+      return res.status(400).json({ message: 'Not enough seats available for the whole team' });
+    }
+
+    const [leaderRows] = await dbp.query('select * from users where id = ?', [leader_user_id]);
+    if (!leaderRows.length) {
+      return res.status(404).json({ message: 'Leader not found' });
+    }
+
+    const leader = leaderRows[0];
+
+    if (uniqueMembers.includes(String(leader.username).toLowerCase())) {
+      return res.status(400).json({ message: 'Do not enter your own username in team members' });
+    }
+
+    if (cleanedMembers.length > 0) {
+      const placeholders = cleanedMembers.map(() => '?').join(',');
+      const [memberRows] = await dbp.query(
+        `select * from users where username in (${placeholders})`,
+        cleanedMembers
+      );
+
+      if (memberRows.length !== cleanedMembers.length) {
+        return res.status(400).json({ message: 'One or more usernames do not exist' });
+      }
+
+      const allUserIds = [leader_user_id, ...memberRows.map(x => x.id)];
+      const checkPlaceholders = allUserIds.map(() => '?').join(',');
+
+      const [existingRegs] = await dbp.query(
+        `select * from registrations where event_id = ? and user_id in (${checkPlaceholders})`,
+        [event_id, ...allUserIds]
+      );
+
+      if (existingRegs.length > 0) {
+        return res.status(400).json({ message: 'One or more users are already registered/waitlisted for this event' });
+      }
+
+      const [existingTeams] = await dbp.query(
+        `
+        select tm.user_id
+        from team_members tm
+        join teams t on tm.team_id = t.id
+        where t.event_id = ? and tm.user_id in (${checkPlaceholders})
+        `,
+        [event_id, ...allUserIds]
+      );
+
+      if (existingTeams.length > 0) {
+        return res.status(400).json({ message: 'One or more users are already in a team for this event' });
+      }
+
+      await dbp.beginTransaction();
+
+      try {
+        const [teamResult] = await dbp.query(
+          'insert into teams (event_id, team_name, leader_user_id, max_members) values (?, ?, ?, ?)',
+          [event_id, team_name, leader_user_id, 5]
+        );
+
+        const teamId = teamResult.insertId;
+
+        await dbp.query(
+          'insert into registrations (user_id, event_id, status) values (?, ?, ?)',
+          [leader_user_id, event_id, 'registered']
+        );
+
+        for (const member of memberRows) {
+          await dbp.query(
+            'insert into registrations (user_id, event_id, status) values (?, ?, ?)',
+            [member.id, event_id, 'registered']
+          );
+        }
+
+        await dbp.query(
+          'insert into team_members (team_id, user_id) values (?, ?)',
+          [teamId, leader_user_id]
+        );
+
+        for (const member of memberRows) {
+          await dbp.query(
+            'insert into team_members (team_id, user_id) values (?, ?)',
+            [teamId, member.id]
+          );
+        }
+
+        await dbp.query(
+          'update events set available_seats = available_seats - ? where id = ?',
+          [totalMembers, event_id]
+        );
+
+        await dbp.commit();
+        return res.json({ message: 'Team registered successfully' });
+      } catch (err2) {
+        await dbp.rollback();
+        return res.status(400).json({ message: 'Team name already exists or team registration failed' });
+      }
+    } else {
+      return res.status(400).json({ message: 'Enter at least one more username for team registration' });
+    }
+  } catch (err) {
+    return res.status(500).json({ message: 'Server error' });
+  }
 });
 
 app.get('/my-registrations/:userId', (req, res) => {
@@ -704,6 +841,27 @@ app.get('/admin/analytics', (req, res) => {
     left join team_members tm on t.id = tm.team_id
     group by e.id
     order by e.id desc
+  `;
+
+  db.query(sql, (err, rows) => {
+    if (err) return res.status(500).json({ message: 'Server error' });
+    res.json(rows);
+  });
+});
+
+app.get('/admin/teams-summary', (req, res) => {
+  const sql = `
+    select
+      t.id,
+      t.team_name,
+      e.name as event_name,
+      group_concat(u.username order by u.username separator ', ') as members
+    from teams t
+    join events e on t.event_id = e.id
+    join team_members tm on tm.team_id = t.id
+    join users u on u.id = tm.user_id
+    group by t.id, t.team_name, e.name
+    order by t.id desc
   `;
 
   db.query(sql, (err, rows) => {

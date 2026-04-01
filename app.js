@@ -197,14 +197,9 @@ async function renderEvents() {
 
       if (session.role === 'user') {
         extra += `
-          <button class="btn-small" onclick="registerEvent(${ev.id})">Register / Join Waitlist</button>
-          <div class="team-box">
-            <h4>Team Formation</h4>
-            <div class="team-actions">
-              <button class="btn-small" onclick="showCreateTeamPrompt(${ev.id})">Create Team</button>
-              <button class="btn-small" onclick="loadTeamsForEvent(${ev.id}, this)">View Teams</button>
-            </div>
-            <div id="teamWrap${ev.id}" class="team-list"></div>
+          <div class="team-actions">
+            <button class="btn-small" onclick="registerIndividual(${ev.id})">Register Individually</button>
+            <button class="btn-small" onclick="showTeamRegistrationPrompt(${ev.id})">Register as Team</button>
           </div>
         `;
       }
@@ -385,6 +380,90 @@ async function registerEvent(eventId) {
     renderEvents();
   } catch (err) {
     alert('Registration failed');
+  }
+}
+
+async function registerIndividual(eventId) {
+  const session = getSession();
+  if (!session || session.role !== 'user') {
+    alert('Please login as user');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: session.id,
+        event_id: eventId
+      })
+    });
+
+    const data = await res.json();
+    alert(data.message || 'Done');
+    renderEvents();
+  } catch (err) {
+    alert('Registration failed');
+  }
+}
+
+function showTeamRegistrationPrompt(eventId) {
+  const session = getSession();
+  if (!session || session.role !== 'user') return;
+
+  const teamName = prompt('Enter team name');
+  if (!teamName || !teamName.trim()) return;
+
+  const totalMembersInput = prompt('Enter total number of members including you (max 5)');
+  if (!totalMembersInput) return;
+
+  const totalMembers = parseInt(totalMembersInput, 10);
+
+  if (isNaN(totalMembers) || totalMembers < 2 || totalMembers > 5) {
+    alert('Team size must be between 2 and 5');
+    return;
+  }
+
+  const memberUsernames = [];
+  const otherCount = totalMembers - 1;
+
+  for (let i = 1; i <= otherCount; i++) {
+    const username = prompt(`Enter username of member ${i}`);
+    if (!username || !username.trim()) {
+      alert('Username is required');
+      return;
+    }
+    memberUsernames.push(username.trim());
+  }
+
+  registerAsTeam(eventId, teamName.trim(), memberUsernames);
+}
+
+async function registerAsTeam(eventId, teamName, memberUsernames) {
+  const session = getSession();
+  if (!session || session.role !== 'user') {
+    alert('Please login as user');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/register-team`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event_id: eventId,
+        team_name: teamName,
+        leader_user_id: session.id,
+        member_usernames: memberUsernames
+      })
+    });
+
+    const data = await res.json();
+    alert(data.message || 'Done');
+    renderEvents();
+  } catch (err) {
+    alert('Team registration failed');
   }
 }
 
@@ -774,38 +853,37 @@ async function renderManageTeams() {
     return;
   }
 
-  const wrap = $('teamEventGrid');
-  const empty = $('emptyTeamEvents');
+  const wrap = $('teamSummaryGrid');
+  const empty = $('emptyTeamSummary');
   if (!wrap || !empty) return;
 
   try {
-    const res = await fetch(`${API_BASE}/admin/events-with-team-counts`);
+    const res = await fetch(`${API_BASE}/admin/teams-summary`);
     const list = await res.json();
 
     wrap.innerHTML = '';
 
     if (!list.length) {
       empty.style.display = 'block';
-      empty.textContent = 'No events found.';
+      empty.textContent = 'No teams found.';
       return;
     }
 
     empty.style.display = 'none';
 
-    list.forEach(function (ev) {
+    list.forEach(function (team) {
       const card = document.createElement('div');
       card.className = 'card';
       card.innerHTML = `
-        <h3>${ev.name || ''}</h3>
-        <p><b>Total Teams:</b> ${Number(ev.team_count || 0)}</p>
-        <p><b>Total Team Members:</b> ${Number(ev.total_team_members || 0)}</p>
-        <button class="btn-small" onclick="loadAdminTeams(${ev.id}, '${(ev.name || '').replace(/'/g, "\\'")}')">View Teams</button>
+        <h3>${team.team_name}</h3>
+        <p><b>Event:</b> ${team.event_name}</p>
+        <p><b>Users:</b> ${team.members || ''}</p>
       `;
       wrap.appendChild(card);
     });
   } catch (err) {
     empty.style.display = 'block';
-    empty.textContent = 'Failed to load team events.';
+    empty.textContent = 'Failed to load teams.';
   }
 }
 
@@ -923,7 +1001,7 @@ async function removeAdminMember(teamId, userId) {
 }
 
 function initManageTeams() {
-  if (!$('teamEventGrid')) return;
+  if (!$('teamSummaryGrid')) return;
   renderManageTeams();
 }
 
@@ -1082,15 +1160,11 @@ document.addEventListener('DOMContentLoaded', function () {
 window.renderEvents = renderEvents;
 window.editEvent = editEvent;
 window.deleteEvent = deleteEvent;
-window.registerEvent = registerEvent;
 window.cancelRegistration = cancelRegistration;
 window.loadAttendees = loadAttendees;
-window.showCreateTeamPrompt = showCreateTeamPrompt;
-window.loadTeamsForEvent = loadTeamsForEvent;
-window.joinTeam = joinTeam;
-window.viewTeamMembers = viewTeamMembers;
+
+
 window.leaveTeam = leaveTeam;
-window.loadAdminTeams = loadAdminTeams;
-window.loadAdminTeamMembers = loadAdminTeamMembers;
-window.deleteAdminTeam = deleteAdminTeam;
-window.removeAdminMember = removeAdminMember;
+
+window.registerIndividual = registerIndividual;
+window.showTeamRegistrationPrompt = showTeamRegistrationPrompt;
