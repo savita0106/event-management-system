@@ -560,6 +560,9 @@ function initManageAttendees() {
   renderManageEvents();
 }
 
+let barChartInstance = null;
+let donutChartInstance = null;
+
 async function renderAnalytics() {
   const session = requireLogin();
   if (!session) return;
@@ -586,7 +589,26 @@ async function renderAnalytics() {
 
     empty.style.display = 'none';
 
+    let totalEvents = list.length;
+    let totalRegistrations = 0;
+    let totalWaitlisted = 0;
+    let totalSeats = 0;
+    let totalFilledSeats = 0;
+    let totalAvailableSeats = 0;
+
+    const eventNames = [];
+    const registeredCounts = [];
+
     list.forEach(function (ev) {
+      totalRegistrations += Number(ev.registered_count || 0);
+      totalWaitlisted += Number(ev.waitlisted_count || 0);
+      totalSeats += Number(ev.total_seats || 0);
+      totalFilledSeats += Number(ev.filled_seats || 0);
+      totalAvailableSeats += Number(ev.available_seats || 0);
+
+      eventNames.push(ev.name || 'Event');
+      registeredCounts.push(Number(ev.registered_count || 0));
+
       const card = document.createElement('div');
       card.className = 'card';
       card.innerHTML = `
@@ -599,6 +621,77 @@ async function renderAnalytics() {
       `;
       wrap.appendChild(card);
     });
+
+    const occupancy = totalSeats > 0
+      ? Math.round((totalFilledSeats / totalSeats) * 100)
+      : 0;
+
+    if ($('totalEvents')) $('totalEvents').textContent = totalEvents;
+    if ($('totalRegistrations')) $('totalRegistrations').textContent = totalRegistrations;
+    if ($('totalWaitlisted')) $('totalWaitlisted').textContent = totalWaitlisted;
+    if ($('occupancyRate')) $('occupancyRate').textContent = occupancy + '%';
+
+    const barCanvas = $('barChart');
+    const donutCanvas = $('donutChart');
+
+    if (barChartInstance) barChartInstance.destroy();
+    if (donutChartInstance) donutChartInstance.destroy();
+
+    if (barCanvas) {
+      barChartInstance = new Chart(barCanvas, {
+        type: 'bar',
+        data: {
+          labels: eventNames,
+          datasets: [{
+            label: 'Registered Users',
+            data: registeredCounts,
+            borderWidth: 1,
+            borderRadius: 8
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              labels: { color: '#ffffff' }
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: '#cbd5e1' },
+              grid: { color: 'rgba(255,255,255,0.08)' }
+            },
+            y: {
+              beginAtZero: true,
+              ticks: { color: '#cbd5e1' },
+              grid: { color: 'rgba(255,255,255,0.08)' }
+            }
+          }
+        }
+      });
+    }
+
+    if (donutCanvas) {
+      donutChartInstance = new Chart(donutCanvas, {
+        type: 'doughnut',
+        data: {
+          labels: ['Filled Seats', 'Available Seats', 'Waitlisted'],
+          datasets: [{
+            data: [totalFilledSeats, totalAvailableSeats, totalWaitlisted],
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { color: '#ffffff' }
+            }
+          }
+        }
+      });
+    }
   } catch (err) {
     empty.style.display = 'block';
     empty.textContent = 'Failed to load analytics.';

@@ -2,348 +2,67 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>EMS Analytics Dashboard Mockup</title>
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: Inter, Arial, sans-serif;
-      background: linear-gradient(135deg, #0f172a, #111827, #1e293b);
-      color: #f8fafc;
-    } 
-    .wrap {
-      max-width: 1280px;
-      margin: 0 auto;
-      padding: 28px;
-    }
-    .hero {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 16px;
-      flex-wrap: wrap;
-      margin-bottom: 22px;
-    }
-    .hero h1 {
-      margin: 0;
-      font-size: 40px;
-      line-height: 1.1;
-    }
-    .hero p {
-      margin: 8px 0 0;
-      color: #cbd5e1;
-    }
-    .badge {
-      padding: 10px 14px;
-      border-radius: 999px;
-      background: rgba(99,102,241,.16);
-      border: 1px solid rgba(129,140,248,.35);
-      color: #c7d2fe;
-      font-weight: 700;
-    }
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0,1fr));
-      gap: 16px;
-      margin-bottom: 24px;
-    }
-    .card, .panel {
-      background: rgba(255,255,255,0.07);
-      border: 1px solid rgba(255,255,255,0.10);
-      border-radius: 24px;
-      box-shadow: 0 18px 40px rgba(0,0,0,.25);
-      backdrop-filter: blur(14px);
-    }
-    .card {
-      padding: 22px;
-      min-height: 124px;
-    }
-    .card .label {
-      color: #cbd5e1;
-      font-size: 14px;
-      margin-bottom: 14px;
-    }
-    .card .value {
-      font-size: 34px;
-      font-weight: 800;
-      margin-bottom: 8px;
-    }
-    .trend {
-      font-size: 13px;
-      color: #86efac;
-    }
-    .layout {
-      display: grid;
-      grid-template-columns: 1.2fr .8fr;
-      gap: 18px;
-      margin-bottom: 18px;
-    }
-    .panel {
-      padding: 22px;
-    }
-    .panel h2 {
-      margin: 0 0 18px;
-      font-size: 22px;
-    }
-    .bars {
-      display: flex;
-      align-items: end;
-      gap: 16px;
-      height: 280px;
-      padding: 10px 4px 0;
-    }
-    .bar-col {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 10px;
-    }
-    .bar {
-      width: 100%;
-      max-width: 72px;
-      border-radius: 18px 18px 8px 8px;
-      background: linear-gradient(180deg, #8b5cf6, #6366f1);
-      box-shadow: 0 12px 30px rgba(99,102,241,.30);
-      position: relative;
-    }
-    .bar::after {
-      content: attr(data-val);
-      position: absolute;
-      top: -28px;
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 12px;
-      color: #cbd5e1;
-      font-weight: 700;
-    }
-    .bar-label {
-      font-size: 13px;
-      text-align: center;
-      color: #cbd5e1;
-    }
-    .ring-wrap {
-      display: grid;
-      place-items: center;
-      padding: 18px 0 6px;
-    }
-    .ring {
-      width: 220px;
-      height: 220px;
-      border-radius: 50%;
-      background: conic-gradient(#6366f1 0 62%, #22c55e 62% 86%, #ef4444 86% 100%);
-      display: grid;
-      place-items: center;
-      box-shadow: 0 14px 36px rgba(0,0,0,.28);
-    }
-    .ring::before {
-      content: "";
-      width: 132px;
-      height: 132px;
-      border-radius: 50%;
-      background: #111827;
-      border: 1px solid rgba(255,255,255,.08);
-    }
-    .ring-center {
-      position: absolute;
-      text-align: center;
-    }
-    .ring-center strong {
-      display: block;
-      font-size: 32px;
-    }
-    .legend {
-      margin-top: 18px;
-      display: grid;
-      gap: 10px;
-    }
-    .legend div {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      color: #dbeafe;
-      font-size: 14px;
-      padding: 10px 12px;
-      background: rgba(255,255,255,.04);
-      border-radius: 14px;
-    }
-    .dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      display: inline-block;
-      margin-right: 8px;
-    }
-    .table {
-      display: grid;
-      gap: 12px;
-    }
-    .row {
-      display: grid;
-      grid-template-columns: 1.6fr repeat(4, .7fr);
-      gap: 12px;
-      padding: 14px 16px;
-      border-radius: 16px;
-      background: rgba(255,255,255,.05);
-      align-items: center;
-    }
-    .row.head {
-      background: rgba(99,102,241,.15);
-      font-weight: 700;
-      color: #c7d2fe;
-    }
-    .mini {
-      height: 10px;
-      background: rgba(255,255,255,.08);
-      border-radius: 999px;
-      overflow: hidden;
-      margin-top: 6px;
-    }
-    .mini span {
-      display: block;
-      height: 100%;
-      border-radius: 999px;
-      background: linear-gradient(90deg, #22c55e, #6366f1);
-    }
-    .note {
-      margin-top: 18px;
-      padding: 16px 18px;
-      border-radius: 18px;
-      background: rgba(34,197,94,.10);
-      border: 1px solid rgba(34,197,94,.22);
-      color: #dcfce7;
-    }
-    @media (max-width: 980px) {
-      .stats, .layout { grid-template-columns: 1fr; }
-      .row { grid-template-columns: 1fr; }
-      .bars { height: 220px; }
-    }
-  </style>
+  <title>Analytics - EventPortal</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="dashboard.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="app.js" defer></script>
 </head>
 <body>
-  <div class="wrap">
-    <section class="hero">
-      <div>
-        <h1>Event Analytics</h1>
-        <p>Modern admin dashboard concept for registrations, seat usage, waitlist pressure, and top-performing events.</p>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">EventPortal</div>
+      <nav class="nav">
+        <a href="view-events.html">View Events</a>
+        <a href="admin-create.html">Create</a>
+        <a href="admin-edit.html">Edit</a>
+        <a href="manage-attendees.html">Manage Attendees</a>
+        <a class="active" href="analytics.html">Analytics</a>
+        <a href="role.html" id="logoutLink">Logout</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <h1 class="page-title">Event Registration Analytics</h1>
+    <p class="subtext">Admin only</p>
+
+    <section class="stats-row">
+      <div class="stat-card">
+        <p>Total Events</p>
+        <h2 id="totalEvents">0</h2>
       </div>
-      <div class="badge">Admin View</div>
+      <div class="stat-card">
+        <p>Total Registrations</p>
+        <h2 id="totalRegistrations">0</h2>
+      </div>
+      <div class="stat-card">
+        <p>Total Waitlisted</p>
+        <h2 id="totalWaitlisted">0</h2>
+      </div>
+      <div class="stat-card">
+        <p>Seat Occupancy</p>
+        <h2 id="occupancyRate">0%</h2>
+      </div>
     </section>
 
-    <section class="stats">
-      <div class="card">
-        <div class="label">Total Events</div>
-        <div class="value">12</div>
-        <div class="trend">+3 added this month</div>
-      </div>
-      <div class="card">
-        <div class="label">Total Registrations</div>
-        <div class="value">184</div>
-        <div class="trend">Strong engagement</div>
-      </div>
-      <div class="card">
-        <div class="label">Waitlisted Users</div>
-        <div class="value">27</div>
-        <div class="trend">High demand events spotted</div>
-      </div>
-      <div class="card">
-        <div class="label">Seat Occupancy</div>
-        <div class="value">78%</div>
-        <div class="trend">Healthy fill rate</div>
-      </div>
-    </section>
-
-    <section class="layout">
-      <div class="panel">
-        <h2>Registrations by Event</h2>
-        <div class="bars">
-          <div class="bar-col">
-            <div class="bar" style="height: 72%;" data-val="48"></div>
-            <div class="bar-label">Tech Talk</div>
-          </div>
-          <div class="bar-col">
-            <div class="bar" style="height: 54%;" data-val="36"></div>
-            <div class="bar-label">Workshop</div>
-          </div>
-          <div class="bar-col">
-            <div class="bar" style="height: 90%;" data-val="61"></div>
-            <div class="bar-label">Hackathon</div>
-          </div>
-          <div class="bar-col">
-            <div class="bar" style="height: 40%;" data-val="22"></div>
-            <div class="bar-label">Seminar</div>
-          </div>
-          <div class="bar-col">
-            <div class="bar" style="height: 64%;" data-val="41"></div>
-            <div class="bar-label">Cultural</div>
-          </div>
-        </div>
+    <section class="charts-row">
+      <div class="chart-card">
+        <h3>Registrations by Event</h3>
+        <canvas id="barChart"></canvas>
       </div>
 
-      <div class="panel">
-        <h2>Seat Distribution</h2>
-        <div class="ring-wrap" style="position:relative;">
-          <div class="ring"></div>
-          <div class="ring-center">
-            <strong>78%</strong>
-            Filled
-          </div>
-        </div>
-        <div class="legend">
-          <div><span><span class="dot" style="background:#6366f1"></span>Filled seats</span><strong>184</strong></div>
-          <div><span><span class="dot" style="background:#22c55e"></span>Available seats</span><strong>41</strong></div>
-          <div><span><span class="dot" style="background:#ef4444"></span>Waitlisted</span><strong>27</strong></div>
-        </div>
+      <div class="chart-card">
+        <h3>Overall Seat Distribution</h3>
+        <canvas id="donutChart"></canvas>
       </div>
     </section>
 
     <section class="panel">
-      <h2>Top Events Overview</h2>
-      <div class="table">
-        <div class="row head">
-          <div>Event</div>
-          <div>Seats</div>
-          <div>Filled</div>
-          <div>Waitlist</div>
-          <div>Progress</div>
-        </div>
-        <div class="row">
-          <div>
-            Hackathon
-            <div class="mini"><span style="width:92%"></span></div>
-          </div>
-          <div>70</div>
-          <div>64</div>
-          <div>12</div>
-          <div>92%</div>
-        </div>
-        <div class="row">
-          <div>
-            Tech Talk
-            <div class="mini"><span style="width:80%"></span></div>
-          </div>
-          <div>60</div>
-          <div>48</div>
-          <div>4</div>
-          <div>80%</div>
-        </div>
-        <div class="row">
-          <div>
-            Cultural Fest
-            <div class="mini"><span style="width:68%"></span></div>
-          </div>
-          <div>60</div>
-          <div>41</div>
-          <div>6</div>
-          <div>68%</div>
-        </div>
-      </div>
-
-      <div class="note">
-        Suggested real implementation for your EMS: keep the summary cards at the top, add a bar chart for registrations, a donut chart for seat usage, and a ranked event table below.
-      </div>
+      <h2 style="margin-bottom:16px;">Event Details</h2>
+      <div id="analyticsGrid" class="grid"></div>
+      <p id="emptyMsg" class="empty">No analytics available.</p>
     </section>
-  </div>
+  </main>
 </body>
 </html>
