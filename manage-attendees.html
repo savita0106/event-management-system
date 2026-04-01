@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Manage Attendees - EventPortal</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="dashboard.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">EventPortal</div>
+      <nav class="nav">
+        <a href="view-events.html">View Events</a>
+        <a href="admin-create.html">Create</a>
+        <a href="admin-edit.html">Edit</a>
+        <a class="active" href="manage-attendees.html">Manage Attendees</a>
+        <a href="analytics.html">Analytics</a>
+        <a href="role.html" id="logoutLink">Logout</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <h1 class="page-title">Manage Event Attendees</h1>
+    <p class="subtext">Admin only</p>
+
+    <section>
+      <div id="manageEventGrid" class="grid"></div>
+      <p id="emptyEvents" class="empty">No events found.</p>
+    </section>
+
+    <section class="panel" style="margin-top:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+        <h2 id="selectedEventTitle" style="margin:0;">Select an event</h2>
+        <button id="promoteBtn" class="btn-small" style="display:none;">Promote Waitlisted User</button>
+      </div>
+
+      <div id="attendeeGrid" class="grid" style="margin-top:16px;"></div>
+      <p id="attendeeEmpty" class="empty">No attendees selected.</p>
+    </section>
+  </main>
+</body>
+</html>

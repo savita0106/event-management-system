@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:3000';
+const API_BASE = window.location.origin;
 
 function $(id) {
   return document.getElementById(id);
@@ -146,13 +146,14 @@ async function renderEvents() {
   }
 
   const q = (($('searchBox') && $('searchBox').value) || '').trim();
+  const availability = (($('availabilityFilter') && $('availabilityFilter').value) || 'all').trim();
   const grid = $('eventGrid');
   const empty = $('emptyMsg');
 
   if (!grid || !empty) return;
 
   try {
-    const res = await fetch(`${API_BASE}/events?q=${encodeURIComponent(q)}`);
+    const res = await fetch(`${API_BASE}/events?q=${encodeURIComponent(q)}&availability=${encodeURIComponent(availability)}`);
     const events = await res.json();
 
     grid.innerHTML = '';
@@ -173,13 +174,14 @@ async function renderEvents() {
         <p><b>Date:</b> ${ev.date || ''} &nbsp; <b>Time:</b> ${ev.time || ''}</p>
         <p><b>Location:</b> ${ev.location || ''}</p>
         <p><b>Description:</b> ${ev.description || ''}</p>
+        <p><b>Total Seats:</b> ${ev.total_seats}</p>
+        <p><b>Available Seats:</b> ${ev.available_seats}</p>
+        <p><b>Status:</b> ${Number(ev.available_seats) > 0 ? 'Open' : 'Full / Waitlist'}</p>
       `;
 
       if (session.role === 'user') {
         extra += `
-          <p><b>Total Seats:</b> ${ev.total_seats}</p>
-          <p><b>Available Seats:</b> ${ev.available_seats}</p>
-          <button class="btn-small" onclick="registerEvent(${ev.id})">Register</button>
+          <button class="btn-small" onclick="registerEvent(${ev.id})">Register / Join Waitlist</button>
         `;
       }
 
@@ -362,6 +364,233 @@ async function registerEvent(eventId) {
   }
 }
 
+async function renderMyRegistrations() {
+  const session = requireLogin();
+  if (!session) return;
+  if (session.role !== 'user') {
+    location.href = 'view-events.html';
+    return;
+  }
+
+  const wrap = $('myRegGrid');
+  const empty = $('emptyMsg');
+  if (!wrap || !empty) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/my-registrations/${session.id}`);
+    const list = await res.json();
+
+    wrap.innerHTML = '';
+
+    if (!list.length) {
+      empty.style.display = 'block';
+      empty.textContent = 'No registrations found.';
+      return;
+    }
+
+    empty.style.display = 'none';
+
+    list.forEach(function (r) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <h3>${r.name || ''}</h3>
+        <p><b>Date:</b> ${r.date || ''} &nbsp; <b>Time:</b> ${r.time || ''}</p>
+        <p><b>Location:</b> ${r.location || ''}</p>
+        <p><b>Status:</b> ${r.status || ''}</p>
+        <p><b>Description:</b> ${r.description || ''}</p>
+        <button class="btn-small btn-danger" onclick="cancelRegistration(${r.id})">Cancel</button>
+      `;
+      wrap.appendChild(card);
+    });
+  } catch (err) {
+    empty.style.display = 'block';
+    empty.textContent = 'Failed to load registrations.';
+  }
+}
+
+async function cancelRegistration(registrationId) {
+  if (!confirm('Cancel this registration?')) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/my-registrations/${registrationId}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json();
+    alert(data.message || 'Done');
+    renderMyRegistrations();
+    if ($('eventGrid')) renderEvents();
+  } catch (err) {
+    alert('Failed to cancel registration');
+  }
+}
+
+function initMyRegistrations() {
+  if (!$('myRegGrid')) return;
+  renderMyRegistrations();
+}
+
+async function renderManageEvents() {
+  const session = requireLogin();
+  if (!session) return;
+  if (session.role !== 'admin') {
+    location.href = 'view-events.html';
+    return;
+  }
+
+  const wrap = $('manageEventGrid');
+  const empty = $('emptyEvents');
+  if (!wrap || !empty) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/admin/events-with-counts`);
+    const list = await res.json();
+
+    wrap.innerHTML = '';
+
+    if (!list.length) {
+      empty.style.display = 'block';
+      empty.textContent = 'No events found.';
+      return;
+    }
+
+    empty.style.display = 'none';
+
+    list.forEach(function (ev) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <h3>${ev.name || ''}</h3>
+        <p><b>Registered:</b> ${Number(ev.registered_count || 0)}</p>
+        <p><b>Waitlisted:</b> ${Number(ev.waitlisted_count || 0)}</p>
+        <p><b>Available Seats:</b> ${ev.available_seats}</p>
+        <button class="btn-small" onclick="loadAttendees(${ev.id}, '${(ev.name || '').replace(/'/g, "\\'")}')">Manage Attendees</button>
+      `;
+      wrap.appendChild(card);
+    });
+  } catch (err) {
+    empty.style.display = 'block';
+    empty.textContent = 'Failed to load events.';
+  }
+}
+
+async function loadAttendees(eventId, eventName) {
+  const title = $('selectedEventTitle');
+  const listWrap = $('attendeeGrid');
+  const empty = $('attendeeEmpty');
+  const promoteBtn = $('promoteBtn');
+
+  if (title) title.textContent = 'Attendees - ' + eventName;
+  if (promoteBtn) {
+    promoteBtn.style.display = 'inline-block';
+    promoteBtn.onclick = function () {
+      promoteWaitlist(eventId);
+    };
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/admin/attendees/${eventId}`);
+    const list = await res.json();
+
+    if (!listWrap || !empty) return;
+
+    listWrap.innerHTML = '';
+
+    if (!list.length) {
+      empty.style.display = 'block';
+      empty.textContent = 'No attendees for this event.';
+      return;
+    }
+
+    empty.style.display = 'none';
+
+    list.forEach(function (row) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <h3>${row.username || ''}</h3>
+        <p><b>Status:</b> ${row.status || ''}</p>
+        <p><b>User ID:</b> ${row.user_id || ''}</p>
+      `;
+      listWrap.appendChild(card);
+    });
+  } catch (err) {
+    if (empty) {
+      empty.style.display = 'block';
+      empty.textContent = 'Failed to load attendees.';
+    }
+  }
+}
+
+async function promoteWaitlist(eventId) {
+  try {
+    const res = await fetch(`${API_BASE}/admin/promote/${eventId}`, {
+      method: 'POST'
+    });
+    const data = await res.json();
+    alert(data.message || 'Done');
+    renderManageEvents();
+    loadAttendees(eventId, 'Selected Event');
+  } catch (err) {
+    alert('Failed to promote waitlisted user');
+  }
+}
+
+function initManageAttendees() {
+  if (!$('manageEventGrid')) return;
+  renderManageEvents();
+}
+
+async function renderAnalytics() {
+  const session = requireLogin();
+  if (!session) return;
+  if (session.role !== 'admin') {
+    location.href = 'view-events.html';
+    return;
+  }
+
+  const wrap = $('analyticsGrid');
+  const empty = $('emptyMsg');
+  if (!wrap || !empty) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/admin/analytics`);
+    const list = await res.json();
+
+    wrap.innerHTML = '';
+
+    if (!list.length) {
+      empty.style.display = 'block';
+      empty.textContent = 'No analytics available.';
+      return;
+    }
+
+    empty.style.display = 'none';
+
+    list.forEach(function (ev) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <h3>${ev.name || ''}</h3>
+        <p><b>Total Seats:</b> ${ev.total_seats}</p>
+        <p><b>Filled Seats:</b> ${ev.filled_seats}</p>
+        <p><b>Available Seats:</b> ${ev.available_seats}</p>
+        <p><b>Registered Users:</b> ${Number(ev.registered_count || 0)}</p>
+        <p><b>Waitlisted Users:</b> ${Number(ev.waitlisted_count || 0)}</p>
+      `;
+      wrap.appendChild(card);
+    });
+  } catch (err) {
+    empty.style.display = 'block';
+    empty.textContent = 'Failed to load analytics.';
+  }
+}
+
+function initAnalytics() {
+  if (!$('analyticsGrid')) return;
+  renderAnalytics();
+}
+
 document.addEventListener('DOMContentLoaded', function () {
   initLogout();
   initLogin();
@@ -369,9 +598,14 @@ document.addEventListener('DOMContentLoaded', function () {
   initViewEvents();
   initAdminCreate();
   initAdminEdit();
+  initMyRegistrations();
+  initManageAttendees();
+  initAnalytics();
 });
 
 window.renderEvents = renderEvents;
 window.editEvent = editEvent;
 window.deleteEvent = deleteEvent;
 window.registerEvent = registerEvent;
+window.cancelRegistration = cancelRegistration;
+window.loadAttendees = loadAttendees;

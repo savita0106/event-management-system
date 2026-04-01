@@ -14,16 +14,15 @@
 
       <nav class="nav">
         <a class="active" href="view-events.html">View Events</a>
-
-        <a href="#" id="navReg">Event Registration</a>
-        <a href="#" id="navSeat">Seat Availability</a>
-        <a href="#" id="navWait">Waitlist</a>
-        <a href="#" id="navMy">My Registrations</a>
+        <a href="view-events.html" id="navReg">Event Registration</a>
+        <a href="view-events.html" id="navSeat">Seat Availability</a>
+        <a href="view-events.html" id="navWait">Waitlist</a>
+        <a href="my-registrations.html" id="navMy">My Registrations</a>
 
         <a href="admin-create.html" id="navCreate">Create Events</a>
         <a href="admin-edit.html" id="navEdit">Edit Events</a>
-        <a href="#" id="navManage">Manage Attendees</a>
-        <a href="#" id="navAna">Analytics</a>
+        <a href="manage-attendees.html" id="navManage">Manage Attendees</a>
+        <a href="analytics.html" id="navAna">Analytics</a>
 
         <a href="role.html" id="logoutLink">Logout</a>
       </nav>
@@ -36,10 +35,20 @@
 
     <section class="panel">
       <div class="controls">
-        <div class="control" style="flex:1;">
+        <div class="control">
           <label>Search</label>
           <input id="searchBox" type="text" placeholder="Type event name or location..." />
         </div>
+
+        <div class="control">
+          <label>Availability</label>
+          <select id="availabilityFilter">
+            <option value="all">All</option>
+            <option value="available">Available Only</option>
+            <option value="full">Full / Waitlist</option>
+          </select>
+        </div>
+
         <div class="control" style="flex:0;">
           <button class="btn-small" onclick="renderEvents()">Search</button>
         </div>
