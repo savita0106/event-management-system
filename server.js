@@ -59,13 +59,20 @@ app.get('/', (req, res) => {
 });
 
 app.post('/signup', (req, res) => {
-  const { username, email, password, role } = req.body;
+  const { username, password, role } = req.body;
 
-  const sql = 'insert into users (username, email, password, role) values (?, ?, ?)';
-  db.query(sql, [username, email, password, role], (err) => {
+  const sql = 'insert into users (username, password, role) values (?, ?, ?)';
+  db.query(sql, [username, password, role], (err) => {
     if (err) {
-      return res.status(400).json({ message: 'Username already exists' });
+      console.log('signup error:', err);
+
+      if (err.code === 'ER_DUP_ENTRY') {
+        return res.status(400).json({ message: 'Username already exists' });
+      }
+
+      return res.status(500).json({ message: 'Signup failed due to database error' });
     }
+
     res.json({ message: 'Signup successful' });
   });
 });
