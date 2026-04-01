@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>My Teams - EventPortal</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="dashboard.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">EventPortal</div>
+      <nav class="nav">
+        <a href="view-events.html">View Events</a>
+        <a href="my-registrations.html">My Registrations</a>
+        <a class="active" href="my-teams.html">My Teams</a>
+        <a href="role.html" id="logoutLink">Logout</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <h1 class="page-title">My Teams</h1>
+    <p class="subtext">Teams you created or joined</p>
+
+    <div id="myTeamsGrid" class="grid"></div>
+    <p id="emptyTeamsMsg" class="empty">No teams found.</p>
+  </main>
+</body>
+</html>

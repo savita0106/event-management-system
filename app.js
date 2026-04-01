@@ -1,4 +1,6 @@
 const API_BASE = window.location.origin;
+let barChartInstance = null;
+let donutChartInstance = null;
 
 function $(id) {
   return document.getElementById(id);
@@ -47,10 +49,11 @@ function applyNav(role) {
     removeEl('navCreate');
     removeEl('navEdit');
     removeEl('navManage');
+    removeEl('navManageTeams');
     removeEl('navAna');
   } else if (role === 'admin') {
-    removeEl('navReg');
     removeEl('navMy');
+    removeEl('navTeams');
   }
 }
 
@@ -164,7 +167,7 @@ async function renderEvents() {
 
     empty.style.display = 'none';
 
-    events.forEach(function (ev) {
+    for (const ev of events) {
       const card = document.createElement('div');
       card.className = 'card';
 
@@ -175,32 +178,40 @@ async function renderEvents() {
         <p><b>Total Seats:</b> ${ev.total_seats}</p>
         <p><b>Available Seats:</b> ${ev.available_seats}</p>
         <p>
-  <b>Status:</b>
-  <span style="
-    display:inline-block;
-    padding:6px 10px;
-    border-radius:999px;
-    font-size:12px;
-    font-weight:700;
-    margin-left:6px;
-    background:${Number(ev.available_seats) > 0 ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)'};
-    color:${Number(ev.available_seats) > 0 ? '#86efac' : '#fca5a5'};
-    border:1px solid ${Number(ev.available_seats) > 0 ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)'};
-  ">
-    ${Number(ev.available_seats) > 0 ? 'Open' : 'Full / Waitlist'}
-  </span>
-</p>
+          <b>Status:</b>
+          <span style="
+            display:inline-block;
+            padding:6px 10px;
+            border-radius:999px;
+            font-size:12px;
+            font-weight:700;
+            margin-left:6px;
+            background:${Number(ev.available_seats) > 0 ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)'};
+            color:${Number(ev.available_seats) > 0 ? '#86efac' : '#fca5a5'};
+            border:1px solid ${Number(ev.available_seats) > 0 ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)'};
+          ">
+            ${Number(ev.available_seats) > 0 ? 'Open' : 'Full / Waitlist'}
+          </span>
+        </p>
       `;
 
       if (session.role === 'user') {
         extra += `
           <button class="btn-small" onclick="registerEvent(${ev.id})">Register / Join Waitlist</button>
+          <div class="team-box">
+            <h4>Team Formation</h4>
+            <div class="team-actions">
+              <button class="btn-small" onclick="showCreateTeamPrompt(${ev.id})">Create Team</button>
+              <button class="btn-small" onclick="loadTeamsForEvent(${ev.id}, this)">View Teams</button>
+            </div>
+            <div id="teamWrap${ev.id}" class="team-list"></div>
+          </div>
         `;
       }
 
       card.innerHTML = `<h3>${ev.name || ''}</h3>${extra}`;
       grid.appendChild(card);
-    });
+    }
   } catch (err) {
     empty.style.display = 'block';
     empty.textContent = 'Failed to load events.';
@@ -518,21 +529,21 @@ async function loadAttendees(eventId, eventName) {
     empty.style.display = 'none';
 
     list.forEach(function (row) {
-  const card = document.createElement('div');
-  card.className = 'card';
-  card.innerHTML = `
-    <h3>${row.username || ''}</h3>
-    <p><b>User ID:</b> ${row.user_id || ''}</p>
-    <p><b>Role:</b> ${row.role || ''}</p>
-    <p><b>Registration Status:</b> ${row.status || ''}</p>
-    <p><b>Registered At:</b> ${row.registered_at || ''}</p>
-    <p><b>Event:</b> ${row.event_name || ''}</p>
-    <p><b>Date:</b> ${row.event_date || ''}</p>
-    <p><b>Time:</b> ${row.event_time || ''}</p>
-    <p><b>Location:</b> ${row.event_location || ''}</p>
-  `;
-  listWrap.appendChild(card);
-});
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <h3>${row.username || ''}</h3>
+        <p><b>User ID:</b> ${row.user_id || ''}</p>
+        <p><b>Role:</b> ${row.role || ''}</p>
+        <p><b>Registration Status:</b> ${row.status || ''}</p>
+        <p><b>Registered At:</b> ${row.registered_at || ''}</p>
+        <p><b>Event:</b> ${row.event_name || ''}</p>
+        <p><b>Date:</b> ${row.event_date || ''}</p>
+        <p><b>Time:</b> ${row.event_time || ''}</p>
+        <p><b>Location:</b> ${row.event_location || ''}</p>
+      `;
+      listWrap.appendChild(card);
+    });
   } catch (err) {
     if (empty) {
       empty.style.display = 'block';
@@ -549,7 +560,6 @@ async function promoteWaitlist(eventId) {
     const data = await res.json();
     alert(data.message || 'Done');
     renderManageEvents();
-    loadAttendees(eventId, 'Selected Event');
   } catch (err) {
     alert('Failed to promote waitlisted user');
   }
@@ -560,8 +570,362 @@ function initManageAttendees() {
   renderManageEvents();
 }
 
-let barChartInstance = null;
-let donutChartInstance = null;
+function showCreateTeamPrompt(eventId) {
+  const session = getSession();
+  if (!session || session.role !== 'user') return;
+
+  const teamName = prompt('Enter team name');
+  if (!teamName) return;
+
+  let maxMembers = prompt('Enter max members (default 4)');
+  if (!maxMembers) maxMembers = 4;
+
+  createTeam(eventId, teamName.trim(), parseInt(maxMembers, 10));
+}
+
+async function createTeam(eventId, teamName, maxMembers) {
+  const session = getSession();
+  if (!session) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/teams`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event_id: eventId,
+        team_name: teamName,
+        leader_user_id: session.id,
+        max_members: maxMembers || 4
+      })
+    });
+
+    const data = await res.json();
+    alert(data.message || 'Done');
+    loadTeamsForEvent(eventId);
+  } catch (err) {
+    alert('Failed to create team');
+  }
+}
+
+async function loadTeamsForEvent(eventId) {
+  const session = getSession();
+  if (!session || session.role !== 'user') return;
+
+  const wrap = $('teamWrap' + eventId);
+  if (!wrap) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/events/${eventId}/teams`);
+    const list = await res.json();
+
+    wrap.innerHTML = '';
+
+    if (!list.length) {
+      wrap.innerHTML = '<p class="empty">No teams yet.</p>';
+      return;
+    }
+
+    list.forEach(function (team) {
+      const item = document.createElement('div');
+      item.className = 'team-item';
+      item.innerHTML = `
+        <p><b>Team:</b> ${team.team_name}</p>
+        <p><b>Leader:</b> ${team.leader_name}</p>
+        <p><b>Members:</b> ${team.member_count} / ${team.max_members}</p>
+        <div class="team-actions">
+          <button class="btn-small" onclick="joinTeam(${team.id}, ${eventId})">Join Team</button>
+          <button class="btn-small" onclick="viewTeamMembers(${team.id})">View Members</button>
+        </div>
+      `;
+      wrap.appendChild(item);
+    });
+  } catch (err) {
+    wrap.innerHTML = '<p class="empty">Failed to load teams.</p>';
+  }
+}
+
+async function joinTeam(teamId, eventId) {
+  const session = getSession();
+  if (!session) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/teams/${teamId}/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: session.id })
+    });
+
+    const data = await res.json();
+    alert(data.message || 'Done');
+    loadTeamsForEvent(eventId);
+  } catch (err) {
+    alert('Failed to join team');
+  }
+}
+
+async function viewTeamMembers(teamId) {
+  try {
+    const res = await fetch(`${API_BASE}/teams/${teamId}/members`);
+    const list = await res.json();
+
+    let text = 'Team Members:\n\n';
+    list.forEach(function (m, index) {
+      text += (index + 1) + '. ' + m.username + '\n';
+    });
+
+    alert(text);
+  } catch (err) {
+    alert('Failed to load team members');
+  }
+}
+
+async function renderMyTeams() {
+  const session = requireLogin();
+  if (!session) return;
+  if (session.role !== 'user') {
+    location.href = 'view-events.html';
+    return;
+  }
+
+  const wrap = $('myTeamsGrid');
+  const empty = $('emptyTeamsMsg');
+  if (!wrap || !empty) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/my-teams/${session.id}`);
+    const list = await res.json();
+
+    wrap.innerHTML = '';
+
+    if (!list.length) {
+      empty.style.display = 'block';
+      empty.textContent = 'No teams found.';
+      return;
+    }
+
+    empty.style.display = 'none';
+
+    for (const team of list) {
+      const membersRes = await fetch(`${API_BASE}/teams/${team.team_id}/members`);
+      const members = await membersRes.json();
+
+      const card = document.createElement('div');
+      card.className = 'card';
+
+      const isLeader = String(team.leader_user_id) === String(session.id);
+
+      let memberHtml = '';
+      members.forEach(function (m) {
+        memberHtml += `<p>${m.username}</p>`;
+      });
+
+      card.innerHTML = `
+        <h3>${team.team_name}</h3>
+        <p><b>Event:</b> ${team.event_name}</p>
+        <p><b>Date:</b> ${team.event_date || ''} &nbsp; <b>Time:</b> ${team.event_time || ''}</p>
+        <p><b>Location:</b> ${team.event_location || ''}</p>
+        <p><b>Role:</b> ${isLeader ? 'Leader' : 'Member'}</p>
+        <p><b>Max Members:</b> ${team.max_members}</p>
+        <div class="team-box">
+          <h4>Members</h4>
+          ${memberHtml}
+        </div>
+        <div class="team-actions">
+          <button class="btn-small btn-danger" onclick="leaveTeam(${team.team_id})">${isLeader ? 'Delete Team' : 'Leave Team'}</button>
+        </div>
+      `;
+      wrap.appendChild(card);
+    }
+  } catch (err) {
+    empty.style.display = 'block';
+    empty.textContent = 'Failed to load teams.';
+  }
+}
+
+async function leaveTeam(teamId) {
+  const session = getSession();
+  if (!session) return;
+
+  if (!confirm('Are you sure?')) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/teams/${teamId}/leave/${session.id}`, {
+      method: 'DELETE'
+    });
+
+    const data = await res.json();
+    alert(data.message || 'Done');
+    renderMyTeams();
+  } catch (err) {
+    alert('Failed to leave team');
+  }
+}
+
+function initMyTeams() {
+  if (!$('myTeamsGrid')) return;
+  renderMyTeams();
+}
+
+async function renderManageTeams() {
+  const session = requireLogin();
+  if (!session) return;
+  if (session.role !== 'admin') {
+    location.href = 'view-events.html';
+    return;
+  }
+
+  const wrap = $('teamEventGrid');
+  const empty = $('emptyTeamEvents');
+  if (!wrap || !empty) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/admin/events-with-team-counts`);
+    const list = await res.json();
+
+    wrap.innerHTML = '';
+
+    if (!list.length) {
+      empty.style.display = 'block';
+      empty.textContent = 'No events found.';
+      return;
+    }
+
+    empty.style.display = 'none';
+
+    list.forEach(function (ev) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <h3>${ev.name || ''}</h3>
+        <p><b>Total Teams:</b> ${Number(ev.team_count || 0)}</p>
+        <p><b>Total Team Members:</b> ${Number(ev.total_team_members || 0)}</p>
+        <button class="btn-small" onclick="loadAdminTeams(${ev.id}, '${(ev.name || '').replace(/'/g, "\\'")}')">View Teams</button>
+      `;
+      wrap.appendChild(card);
+    });
+  } catch (err) {
+    empty.style.display = 'block';
+    empty.textContent = 'Failed to load team events.';
+  }
+}
+
+async function loadAdminTeams(eventId, eventName) {
+  const title = $('selectedTeamEventTitle');
+  const wrap = $('adminTeamGrid');
+  const empty = $('emptyAdminTeams');
+
+  if (title) title.textContent = 'Teams - ' + eventName;
+  if (!wrap || !empty) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/admin/teams/${eventId}`);
+    const list = await res.json();
+
+    wrap.innerHTML = '';
+
+    if (!list.length) {
+      empty.style.display = 'block';
+      empty.textContent = 'No teams found for this event.';
+      return;
+    }
+
+    empty.style.display = 'none';
+
+    list.forEach(function (team) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <h3>${team.team_name}</h3>
+        <p><b>Leader:</b> ${team.leader_name}</p>
+        <p><b>Members:</b> ${team.member_count} / ${team.max_members}</p>
+        <div class="team-actions">
+          <button class="btn-small" onclick="loadAdminTeamMembers(${team.id}, '${(team.team_name || '').replace(/'/g, "\\'")}')">View Members</button>
+          <button class="btn-small btn-danger" onclick="deleteAdminTeam(${team.id}, ${eventId}, '${(eventName || '').replace(/'/g, "\\'")}')">Delete Team</button>
+        </div>
+      `;
+      wrap.appendChild(card);
+    });
+  } catch (err) {
+    empty.style.display = 'block';
+    empty.textContent = 'Failed to load teams.';
+  }
+}
+
+async function loadAdminTeamMembers(teamId, teamName) {
+  const title = $('selectedAdminTeamTitle');
+  const wrap = $('adminTeamMembersGrid');
+  const empty = $('emptyAdminTeamMembers');
+
+  if (title) title.textContent = 'Members - ' + teamName;
+  if (!wrap || !empty) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/admin/team-members/${teamId}`);
+    const list = await res.json();
+
+    wrap.innerHTML = '';
+
+    if (!list.length) {
+      empty.style.display = 'block';
+      empty.textContent = 'No members found.';
+      return;
+    }
+
+    empty.style.display = 'none';
+
+    list.forEach(function (member) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <h3>${member.username}</h3>
+        <p><b>User ID:</b> ${member.user_id}</p>
+        <p><b>Joined At:</b> ${member.joined_at || ''}</p>
+        <button class="btn-small btn-danger" onclick="removeAdminMember(${teamId}, ${member.user_id})">Remove Member</button>
+      `;
+      wrap.appendChild(card);
+    });
+  } catch (err) {
+    empty.style.display = 'block';
+    empty.textContent = 'Failed to load team members.';
+  }
+}
+
+async function deleteAdminTeam(teamId, eventId, eventName) {
+  if (!confirm('Delete this team?')) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/admin/teams/${teamId}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json();
+    alert(data.message || 'Done');
+    renderManageTeams();
+    loadAdminTeams(eventId, eventName);
+    if ($('adminTeamMembersGrid')) $('adminTeamMembersGrid').innerHTML = '';
+  } catch (err) {
+    alert('Failed to delete team');
+  }
+}
+
+async function removeAdminMember(teamId, userId) {
+  if (!confirm('Remove this member?')) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/admin/team-members/${teamId}/${userId}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json();
+    alert(data.message || 'Done');
+    loadAdminTeamMembers(teamId, 'Selected Team');
+  } catch (err) {
+    alert('Failed to remove member');
+  }
+}
+
+function initManageTeams() {
+  if (!$('teamEventGrid')) return;
+  renderManageTeams();
+}
 
 async function renderAnalytics() {
   const session = requireLogin();
@@ -592,7 +956,7 @@ async function renderAnalytics() {
     let totalEvents = list.length;
     let totalRegistrations = 0;
     let totalWaitlisted = 0;
-    let totalSeats = 0;
+    let totalTeams = 0;
     let totalFilledSeats = 0;
     let totalAvailableSeats = 0;
 
@@ -602,7 +966,7 @@ async function renderAnalytics() {
     list.forEach(function (ev) {
       totalRegistrations += Number(ev.registered_count || 0);
       totalWaitlisted += Number(ev.waitlisted_count || 0);
-      totalSeats += Number(ev.total_seats || 0);
+      totalTeams += Number(ev.team_count || 0);
       totalFilledSeats += Number(ev.filled_seats || 0);
       totalAvailableSeats += Number(ev.available_seats || 0);
 
@@ -618,18 +982,16 @@ async function renderAnalytics() {
         <p><b>Available Seats:</b> ${ev.available_seats}</p>
         <p><b>Registered Users:</b> ${Number(ev.registered_count || 0)}</p>
         <p><b>Waitlisted Users:</b> ${Number(ev.waitlisted_count || 0)}</p>
+        <p><b>Total Teams:</b> ${Number(ev.team_count || 0)}</p>
+        <p><b>Team Members:</b> ${Number(ev.team_member_count || 0)}</p>
       `;
       wrap.appendChild(card);
     });
 
-    const occupancy = totalSeats > 0
-      ? Math.round((totalFilledSeats / totalSeats) * 100)
-      : 0;
-
     if ($('totalEvents')) $('totalEvents').textContent = totalEvents;
     if ($('totalRegistrations')) $('totalRegistrations').textContent = totalRegistrations;
     if ($('totalWaitlisted')) $('totalWaitlisted').textContent = totalWaitlisted;
-    if ($('occupancyRate')) $('occupancyRate').textContent = occupancy + '%';
+    if ($('totalTeams')) $('totalTeams').textContent = totalTeams;
 
     const barCanvas = $('barChart');
     const donutCanvas = $('donutChart');
@@ -637,7 +999,7 @@ async function renderAnalytics() {
     if (barChartInstance) barChartInstance.destroy();
     if (donutChartInstance) donutChartInstance.destroy();
 
-    if (barCanvas) {
+    if (barCanvas && typeof Chart !== 'undefined') {
       barChartInstance = new Chart(barCanvas, {
         type: 'bar',
         data: {
@@ -671,7 +1033,7 @@ async function renderAnalytics() {
       });
     }
 
-    if (donutCanvas) {
+    if (donutCanvas && typeof Chart !== 'undefined') {
       donutChartInstance = new Chart(donutCanvas, {
         type: 'doughnut',
         data: {
@@ -712,6 +1074,8 @@ document.addEventListener('DOMContentLoaded', function () {
   initAdminEdit();
   initMyRegistrations();
   initManageAttendees();
+  initMyTeams();
+  initManageTeams();
   initAnalytics();
 });
 
@@ -721,3 +1085,12 @@ window.deleteEvent = deleteEvent;
 window.registerEvent = registerEvent;
 window.cancelRegistration = cancelRegistration;
 window.loadAttendees = loadAttendees;
+window.showCreateTeamPrompt = showCreateTeamPrompt;
+window.loadTeamsForEvent = loadTeamsForEvent;
+window.joinTeam = joinTeam;
+window.viewTeamMembers = viewTeamMembers;
+window.leaveTeam = leaveTeam;
+window.loadAdminTeams = loadAdminTeams;
+window.loadAdminTeamMembers = loadAdminTeamMembers;
+window.deleteAdminTeam = deleteAdminTeam;
+window.removeAdminMember = removeAdminMember;

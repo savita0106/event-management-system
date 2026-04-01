@@ -175,10 +175,23 @@ app.put('/events/:id', (req, res) => {
 });
 
 app.delete('/events/:id', (req, res) => {
-  const sql = 'delete from events where id = ?';
-  db.query(sql, [req.params.id], (err) => {
-    if (err) return res.status(500).json({ message: 'Server error' });
-    res.json({ message: 'Event deleted' });
+  const eventId = req.params.id;
+
+  db.query('delete from team_members where team_id in (select id from teams where event_id = ?)', [eventId], (err0) => {
+    if (err0) return res.status(500).json({ message: 'Server error' });
+
+    db.query('delete from teams where event_id = ?', [eventId], (err01) => {
+      if (err01) return res.status(500).json({ message: 'Server error' });
+
+      db.query('delete from registrations where event_id = ?', [eventId], (err02) => {
+        if (err02) return res.status(500).json({ message: 'Server error' });
+
+        db.query('delete from events where id = ?', [eventId], (err) => {
+          if (err) return res.status(500).json({ message: 'Server error' });
+          res.json({ message: 'Event deleted' });
+        });
+      });
+    });
   });
 });
 
@@ -256,24 +269,56 @@ app.delete('/my-registrations/:registrationId', (req, res) => {
 
     const reg = rows[0];
 
-    const deleteSql = 'delete from registrations where id = ?';
-    db.query(deleteSql, [registrationId], (err2) => {
-      if (err2) return res.status(500).json({ message: 'Server error' });
+    const deleteTeamsSql = `
+      delete tm from team_members tm
+      join teams t on tm.team_id = t.id
+      where tm.user_id = ? and t.event_id = ?
+    `;
 
-      if (reg.status === 'registered') {
-        const seatSql = 'update events set available_seats = available_seats + 1 where id = ?';
-        db.query(seatSql, [reg.event_id], (err3) => {
-          if (err3) return res.status(500).json({ message: 'Server error' });
+    db.query(deleteTeamsSql, [reg.user_id, reg.event_id], (teamErr) => {
+      if (teamErr) return res.status(500).json({ message: 'Server error' });
 
-          promoteWaitlisted(reg.event_id, (err4) => {
-            if (err4) return res.status(500).json({ message: 'Server error' });
-            res.json({ message: 'Registration cancelled' });
+      const deleteLeaderTeamsSql = 'select id from teams where leader_user_id = ? and event_id = ?';
+      db.query(deleteLeaderTeamsSql, [reg.user_id, reg.event_id], (leaderErr, leaderTeams) => {
+        if (leaderErr) return res.status(500).json({ message: 'Server error' });
+
+        if (leaderTeams.length) {
+          const teamIds = leaderTeams.map((x) => x.id);
+
+          db.query('delete from team_members where team_id in (?)', [teamIds], (errA) => {
+            if (errA) return res.status(500).json({ message: 'Server error' });
+
+            db.query('delete from teams where id in (?)', [teamIds], (errB) => {
+              if (errB) return res.status(500).json({ message: 'Server error' });
+              continueRegistrationDelete();
+            });
           });
-        });
-      } else {
-        res.json({ message: 'Waitlist entry removed' });
-      }
+        } else {
+          continueRegistrationDelete();
+        }
+      });
     });
+
+    function continueRegistrationDelete() {
+      const deleteSql = 'delete from registrations where id = ?';
+      db.query(deleteSql, [registrationId], (err2) => {
+        if (err2) return res.status(500).json({ message: 'Server error' });
+
+        if (reg.status === 'registered') {
+          const seatSql = 'update events set available_seats = available_seats + 1 where id = ?';
+          db.query(seatSql, [reg.event_id], (err3) => {
+            if (err3) return res.status(500).json({ message: 'Server error' });
+
+            promoteWaitlisted(reg.event_id, (err4) => {
+              if (err4) return res.status(500).json({ message: 'Server error' });
+              res.json({ message: 'Registration cancelled' });
+            });
+          });
+        } else {
+          res.json({ message: 'Waitlist entry removed' });
+        }
+      });
+    }
   });
 });
 
@@ -342,6 +387,305 @@ app.post('/admin/promote/:eventId', (req, res) => {
   });
 });
 
+/* TEAM ROUTES */
+
+app.post('/teams', (req, res) => {
+  const { event_id, team_name, leader_user_id, max_members } = req.body;
+
+  if (!event_id || !team_name || !leader_user_id) {
+    return res.status(400).json({ message: 'Missing required fields' });
+  }
+
+  const regSql = `
+    select * from registrations
+    where user_id = ? and event_id = ? and status = 'registered'
+  `;
+
+  db.query(regSql, [leader_user_id, event_id], (err, regRows) => {
+    if (err) return res.status(500).json({ message: 'Server error' });
+    if (!regRows.length) {
+      return res.status(400).json({ message: 'Only registered users can create a team' });
+    }
+
+    const checkUserTeamSql = `
+      select tm.id
+      from team_members tm
+      join teams t on tm.team_id = t.id
+      where tm.user_id = ? and t.event_id = ?
+    `;
+
+    db.query(checkUserTeamSql, [leader_user_id, event_id], (err2, teamRows) => {
+      if (err2) return res.status(500).json({ message: 'Server error' });
+      if (teamRows.length) {
+        return res.status(400).json({ message: 'User is already in a team for this event' });
+      }
+
+      const createSql = `
+        insert into teams (event_id, team_name, leader_user_id, max_members)
+        values (?, ?, ?, ?)
+      `;
+
+      db.query(createSql, [event_id, team_name, leader_user_id, max_members || 4], (err3, result) => {
+        if (err3) {
+          return res.status(400).json({ message: 'Team name already exists for this event' });
+        }
+
+        const teamId = result.insertId;
+        const addLeaderSql = 'insert into team_members (team_id, user_id) values (?, ?)';
+
+        db.query(addLeaderSql, [teamId, leader_user_id], (err4) => {
+          if (err4) return res.status(500).json({ message: 'Server error' });
+          res.json({ message: 'Team created successfully' });
+        });
+      });
+    });
+  });
+});
+
+app.get('/events/:eventId/teams', (req, res) => {
+  const sql = `
+    select
+      t.id,
+      t.team_name,
+      t.max_members,
+      t.created_at,
+      leader.username as leader_name,
+      count(tm.id) as member_count
+    from teams t
+    join users leader on t.leader_user_id = leader.id
+    left join team_members tm on t.id = tm.team_id
+    where t.event_id = ?
+    group by t.id
+    order by t.id desc
+  `;
+
+  db.query(sql, [req.params.eventId], (err, rows) => {
+    if (err) return res.status(500).json({ message: 'Server error' });
+    res.json(rows);
+  });
+});
+
+app.post('/teams/:teamId/join', (req, res) => {
+  const { user_id } = req.body;
+  const teamId = req.params.teamId;
+
+  const teamSql = 'select * from teams where id = ?';
+  db.query(teamSql, [teamId], (err, teamRows) => {
+    if (err) return res.status(500).json({ message: 'Server error' });
+    if (!teamRows.length) return res.status(404).json({ message: 'Team not found' });
+
+    const team = teamRows[0];
+
+    const regSql = `
+      select * from registrations
+      where user_id = ? and event_id = ? and status = 'registered'
+    `;
+
+    db.query(regSql, [user_id, team.event_id], (err2, regRows) => {
+      if (err2) return res.status(500).json({ message: 'Server error' });
+      if (!regRows.length) {
+        return res.status(400).json({ message: 'Only registered users can join a team' });
+      }
+
+      const existingSql = `
+        select tm.id
+        from team_members tm
+        join teams t on tm.team_id = t.id
+        where tm.user_id = ? and t.event_id = ?
+      `;
+
+      db.query(existingSql, [user_id, team.event_id], (err3, existingRows) => {
+        if (err3) return res.status(500).json({ message: 'Server error' });
+        if (existingRows.length) {
+          return res.status(400).json({ message: 'User is already in a team for this event' });
+        }
+
+        const countSql = 'select count(*) as cnt from team_members where team_id = ?';
+        db.query(countSql, [teamId], (err4, countRows) => {
+          if (err4) return res.status(500).json({ message: 'Server error' });
+
+          if (countRows[0].cnt >= team.max_members) {
+            return res.status(400).json({ message: 'Team is full' });
+          }
+
+          const joinSql = 'insert into team_members (team_id, user_id) values (?, ?)';
+          db.query(joinSql, [teamId, user_id], (err5) => {
+            if (err5) return res.status(500).json({ message: 'Server error' });
+            res.json({ message: 'Joined team successfully' });
+          });
+        });
+      });
+    });
+  });
+});
+
+app.delete('/teams/:teamId/leave/:userId', (req, res) => {
+  const teamId = req.params.teamId;
+  const userId = req.params.userId;
+
+  const teamSql = 'select * from teams where id = ?';
+  db.query(teamSql, [teamId], (err, teamRows) => {
+    if (err) return res.status(500).json({ message: 'Server error' });
+    if (!teamRows.length) return res.status(404).json({ message: 'Team not found' });
+
+    const team = teamRows[0];
+
+    if (String(team.leader_user_id) === String(userId)) {
+      db.query('delete from team_members where team_id = ?', [teamId], (err2) => {
+        if (err2) return res.status(500).json({ message: 'Server error' });
+
+        db.query('delete from teams where id = ?', [teamId], (err3) => {
+          if (err3) return res.status(500).json({ message: 'Server error' });
+          res.json({ message: 'Leader left. Team deleted.' });
+        });
+      });
+    } else {
+      db.query('delete from team_members where team_id = ? and user_id = ?', [teamId, userId], (err4) => {
+        if (err4) return res.status(500).json({ message: 'Server error' });
+        res.json({ message: 'Left team successfully' });
+      });
+    }
+  });
+});
+
+app.get('/teams/:teamId/members', (req, res) => {
+  const sql = `
+    select
+      tm.id,
+      tm.user_id,
+      u.username,
+      tm.joined_at
+    from team_members tm
+    join users u on tm.user_id = u.id
+    where tm.team_id = ?
+    order by tm.id asc
+  `;
+
+  db.query(sql, [req.params.teamId], (err, rows) => {
+    if (err) return res.status(500).json({ message: 'Server error' });
+    res.json(rows);
+  });
+});
+
+app.get('/my-teams/:userId', (req, res) => {
+  const sql = `
+    select
+      t.id as team_id,
+      t.team_name,
+      t.event_id,
+      t.max_members,
+      t.leader_user_id,
+      e.name as event_name,
+      e.date as event_date,
+      e.time as event_time,
+      e.location as event_location
+    from team_members tm
+    join teams t on tm.team_id = t.id
+    join events e on t.event_id = e.id
+    where tm.user_id = ?
+    order by t.id desc
+  `;
+
+  db.query(sql, [req.params.userId], (err, rows) => {
+    if (err) return res.status(500).json({ message: 'Server error' });
+    res.json(rows);
+  });
+});
+
+app.get('/admin/events-with-team-counts', (req, res) => {
+  const sql = `
+    select
+      e.id,
+      e.name,
+      count(distinct t.id) as team_count,
+      count(distinct tm.user_id) as total_team_members
+    from events e
+    left join teams t on e.id = t.event_id
+    left join team_members tm on t.id = tm.team_id
+    group by e.id
+    order by e.id desc
+  `;
+
+  db.query(sql, (err, rows) => {
+    if (err) return res.status(500).json({ message: 'Server error' });
+    res.json(rows);
+  });
+});
+
+app.get('/admin/teams/:eventId', (req, res) => {
+  const sql = `
+    select
+      t.id,
+      t.team_name,
+      t.max_members,
+      t.leader_user_id,
+      leader.username as leader_name,
+      count(tm.id) as member_count
+    from teams t
+    join users leader on t.leader_user_id = leader.id
+    left join team_members tm on t.id = tm.team_id
+    where t.event_id = ?
+    group by t.id
+    order by t.id desc
+  `;
+
+  db.query(sql, [req.params.eventId], (err, rows) => {
+    if (err) return res.status(500).json({ message: 'Server error' });
+    res.json(rows);
+  });
+});
+
+app.get('/admin/team-members/:teamId', (req, res) => {
+  const sql = `
+    select
+      tm.id,
+      tm.user_id,
+      u.username,
+      tm.joined_at
+    from team_members tm
+    join users u on tm.user_id = u.id
+    where tm.team_id = ?
+    order by tm.id asc
+  `;
+
+  db.query(sql, [req.params.teamId], (err, rows) => {
+    if (err) return res.status(500).json({ message: 'Server error' });
+    res.json(rows);
+  });
+});
+
+app.delete('/admin/teams/:teamId', (req, res) => {
+  const teamId = req.params.teamId;
+
+  db.query('delete from team_members where team_id = ?', [teamId], (err) => {
+    if (err) return res.status(500).json({ message: 'Server error' });
+
+    db.query('delete from teams where id = ?', [teamId], (err2) => {
+      if (err2) return res.status(500).json({ message: 'Server error' });
+      res.json({ message: 'Team deleted successfully' });
+    });
+  });
+});
+
+app.delete('/admin/team-members/:teamId/:userId', (req, res) => {
+  const { teamId, userId } = req.params;
+
+  const leaderSql = 'select leader_user_id from teams where id = ?';
+  db.query(leaderSql, [teamId], (err, rows) => {
+    if (err) return res.status(500).json({ message: 'Server error' });
+    if (!rows.length) return res.status(404).json({ message: 'Team not found' });
+
+    if (String(rows[0].leader_user_id) === String(userId)) {
+      return res.status(400).json({ message: 'Cannot remove leader here. Delete the team instead.' });
+    }
+
+    db.query('delete from team_members where team_id = ? and user_id = ?', [teamId, userId], (err2) => {
+      if (err2) return res.status(500).json({ message: 'Server error' });
+      res.json({ message: 'Member removed successfully' });
+    });
+  });
+});
+
 app.get('/admin/analytics', (req, res) => {
   const sql = `
     select
@@ -351,9 +695,13 @@ app.get('/admin/analytics', (req, res) => {
       e.available_seats,
       (e.total_seats - e.available_seats) as filled_seats,
       sum(case when r.status = 'registered' then 1 else 0 end) as registered_count,
-      sum(case when r.status = 'waitlisted' then 1 else 0 end) as waitlisted_count
+      sum(case when r.status = 'waitlisted' then 1 else 0 end) as waitlisted_count,
+      count(distinct t.id) as team_count,
+      count(distinct tm.user_id) as team_member_count
     from events e
     left join registrations r on e.id = r.event_id
+    left join teams t on e.id = t.event_id
+    left join team_members tm on t.id = tm.team_id
     group by e.id
     order by e.id desc
   `;

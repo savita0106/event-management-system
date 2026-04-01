@@ -255,3 +255,110 @@ h2 {
     grid-template-columns: 1fr;
   }
 }
+
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  padding: 22px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 14px 35px rgba(0, 0, 0, 0.2);
+}
+
+.stat-card p {
+  text-align: left;
+  margin: 0 0 10px;
+  color: #cbd5e1;
+  font-size: 14px;
+}
+
+.stat-card h2 {
+  margin: 0;
+  font-size: 34px;
+  color: #fff;
+  font-weight: 800;
+}
+
+.charts-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.chart-card {
+  padding: 22px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 14px 35px rgba(0, 0, 0, 0.2);
+}
+
+.chart-card h3 {
+  margin: 0 0 16px;
+  color: #fff;
+  font-size: 20px;
+}
+
+.chart-card canvas {
+  width: 100% !important;
+  max-height: 340px;
+}
+
+.team-box {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+.team-box h4 {
+  margin: 0 0 10px;
+  color: #fff;
+  font-size: 16px;
+}
+
+.team-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.team-item {
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.team-item p {
+  margin: 6px 0;
+}
+
+.team-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+@media (max-width: 1000px) {
+  .stats-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .charts-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .stats-row {
+    grid-template-columns: 1fr;
+  }
+}
