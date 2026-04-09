@@ -9,6 +9,11 @@ app.use(express.static(__dirname));
 app.use(cors());
 app.use(express.json());
 
+console.log('DB_HOST =', process.env.DB_HOST || 'localhost');
+console.log('DB_USER =', process.env.DB_USER || 'root');
+console.log('DB_NAME =', process.env.DB_NAME || 'eventdb');
+console.log('DB_PORT =', process.env.DB_PORT || 3306);
+
 const db = mysql.createConnection({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
@@ -59,15 +64,15 @@ app.get('/', (req, res) => {
 });
 
 app.post('/signup', (req, res) => {
-  const { username, password, role } = req.body;
+  const { username, email, password, role } = req.body;
 
-  const sql = 'insert into users (username, password, role) values (?, ?, ?)';
-  db.query(sql, [username, password, role], (err) => {
+  const sql = 'insert into users (username, email, password, role) values (?, ?, ?, ?)';
+  db.query(sql, [username, email, password, role], (err) => {
     if (err) {
       console.log('signup error:', err);
 
       if (err.code === 'ER_DUP_ENTRY') {
-        return res.status(400).json({ message: 'Username already exists' });
+        return res.status(400).json({ message: 'Username or email already exists' });
       }
 
       return res.status(500).json({ message: 'Signup failed due to database error' });
@@ -186,20 +191,12 @@ app.put('/events/:id', (req, res) => {
 app.delete('/events/:id', (req, res) => {
   const eventId = req.params.id;
 
-  db.query('delete from team_members where team_id in (select id from teams where event_id = ?)', [eventId], (err0) => {
-    if (err0) return res.status(500).json({ message: 'Server error' });
+  db.query('delete from registrations where event_id = ?', [eventId], (err02) => {
+    if (err02) return res.status(500).json({ message: 'Server error' });
 
-    db.query('delete from teams where event_id = ?', [eventId], (err01) => {
-      if (err01) return res.status(500).json({ message: 'Server error' });
-
-      db.query('delete from registrations where event_id = ?', [eventId], (err02) => {
-        if (err02) return res.status(500).json({ message: 'Server error' });
-
-        db.query('delete from events where id = ?', [eventId], (err) => {
-          if (err) return res.status(500).json({ message: 'Server error' });
-          res.json({ message: 'Event deleted' });
-        });
-      });
+    db.query('delete from events where id = ?', [eventId], (err) => {
+      if (err) return res.status(500).json({ message: 'Server error' });
+      res.json({ message: 'Event deleted' });
     });
   });
 });
@@ -244,15 +241,16 @@ app.post('/register', (req, res) => {
   });
 });
 
-app.post('/register-team', async (req, res) => {
-  const { event_id, team_name, leader_user_id, member_emails } = req.body;
+app.post('/teams', async (req, res) => {
+  const { team_name, leader_user_id, member_emails } = req.body;
 
-  if (!event_id || !team_name || !leader_user_id) {
+  if (!team_name || !leader_user_id) {
     return res.status(400).json({ message: 'Missing required fields' });
   }
 
-  const others = Array.isArray(member_emails) ? member_emails : [];
-  const cleanedEmails = others.map(x => String(x || '').trim().toLowerCase()).filter(Boolean);
+  const cleanedEmails = Array.isArray(member_emails)
+    ? member_emails.map(x => String(x || '').trim().toLowerCase()).filter(Boolean)
+    : [];
 
   const uniqueEmails = [...new Set(cleanedEmails)];
 
@@ -260,24 +258,13 @@ app.post('/register-team', async (req, res) => {
     return res.status(400).json({ message: 'Duplicate email IDs are not allowed' });
   }
 
-  const totalMembers = 1 + cleanedEmails.length;
+  const totalMembers = 1 + uniqueEmails.length;
 
   if (totalMembers < 2 || totalMembers > 5) {
     return res.status(400).json({ message: 'Team size must be between 2 and 5' });
   }
 
   try {
-    const [eventRows] = await dbp.query('select * from events where id = ?', [event_id]);
-    if (!eventRows.length) {
-      return res.status(404).json({ message: 'Event not found' });
-    }
-
-    const event = eventRows[0];
-
-    if (Number(event.available_seats) < totalMembers) {
-      return res.status(400).json({ message: 'Not enough seats available for the whole team' });
-    }
-
     const [leaderRows] = await dbp.query('select * from users where id = ?', [leader_user_id]);
     if (!leaderRows.length) {
       return res.status(404).json({ message: 'Leader not found' });
@@ -289,26 +276,26 @@ app.post('/register-team', async (req, res) => {
       return res.status(400).json({ message: 'Do not enter your own email ID in team members' });
     }
 
-    const placeholders = cleanedEmails.map(() => '?').join(',');
+    const placeholders = uniqueEmails.map(() => '?').join(',');
     const [memberRows] = await dbp.query(
       `select * from users where lower(email) in (${placeholders})`,
-      cleanedEmails
+      uniqueEmails
     );
 
-    if (memberRows.length !== cleanedEmails.length) {
+    if (memberRows.length !== uniqueEmails.length) {
       return res.status(400).json({ message: 'One or more email IDs do not exist' });
     }
 
     const allUserIds = [leader_user_id, ...memberRows.map(x => x.id)];
-    const checkPlaceholders = allUserIds.map(() => '?').join(',');
+    const memberCheckPlaceholders = allUserIds.map(() => '?').join(',');
 
-    const [existingRegs] = await dbp.query(
-      `select * from registrations where event_id = ? and user_id in (${checkPlaceholders})`,
-      [event_id, ...allUserIds]
+    const [alreadyInTeam] = await dbp.query(
+      `select * from team_members where user_id in (${memberCheckPlaceholders})`,
+      allUserIds
     );
 
-    if (existingRegs.length > 0) {
-      return res.status(400).json({ message: 'One or more users are already registered/waitlisted for this event' });
+    if (alreadyInTeam.length > 0) {
+      return res.status(400).json({ message: 'One or more users are already in another team' });
     }
 
     await dbp.beginTransaction();
@@ -316,22 +303,10 @@ app.post('/register-team', async (req, res) => {
     try {
       const [teamResult] = await dbp.query(
         'insert into teams (event_id, team_name, leader_user_id, max_members) values (?, ?, ?, ?)',
-        [event_id, team_name, leader_user_id, 5]
+        [null, team_name, leader_user_id, 5]
       );
 
       const teamId = teamResult.insertId;
-
-      await dbp.query(
-        'insert into registrations (user_id, event_id, status) values (?, ?, ?)',
-        [leader_user_id, event_id, 'registered']
-      );
-
-      for (const member of memberRows) {
-        await dbp.query(
-          'insert into registrations (user_id, event_id, status) values (?, ?, ?)',
-          [member.id, event_id, 'registered']
-        );
-      }
 
       await dbp.query(
         'insert into team_members (team_id, user_id) values (?, ?)',
@@ -345,21 +320,116 @@ app.post('/register-team', async (req, res) => {
         );
       }
 
-      await dbp.query(
-        'update events set available_seats = available_seats - ? where id = ?',
-        [totalMembers, event_id]
-      );
-
       await dbp.commit();
-      return res.json({ message: 'Team registered successfully' });
+      return res.json({ message: 'Team created successfully' });
     } catch (err2) {
       await dbp.rollback();
-      return res.status(400).json({ message: 'Team name already exists or team registration failed' });
+      return res.status(400).json({ message: 'Team name already exists or team creation failed' });
     }
   } catch (err) {
     return res.status(500).json({ message: 'Server error' });
   }
 });
+
+app.get('/my-teams/:userId', async (req, res) => {
+  const userId = req.params.userId;
+
+  const sql = `
+    select
+      t.id,
+      t.team_name,
+      leader.username as leader_name,
+      count(tm.user_id) as member_count,
+      group_concat(u.email order by u.email separator ', ') as members
+    from teams t
+    join users leader on leader.id = t.leader_user_id
+    join team_members tm on tm.team_id = t.id
+    join users u on u.id = tm.user_id
+    where t.id in (
+      select team_id from team_members where user_id = ?
+    )
+    group by t.id, t.team_name, leader.username
+    order by t.id desc
+  `;
+
+  db.query(sql, [userId], (err, rows) => {
+    if (err) return res.status(500).json({ message: 'Server error' });
+    res.json(rows);
+  });
+});
+
+app.post('/register-team-to-event', async (req, res) => {
+  const { event_id, team_id } = req.body;
+
+  if (!event_id || !team_id) {
+    return res.status(400).json({ message: 'Missing required fields' });
+  }
+
+  try {
+    const [eventRows] = await dbp.query('select * from events where id = ?', [event_id]);
+    if (!eventRows.length) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+
+    const event = eventRows[0];
+
+    const [teamRows] = await dbp.query('select * from teams where id = ?', [team_id]);
+    if (!teamRows.length) {
+      return res.status(404).json({ message: 'Team not found' });
+    }
+
+    const [members] = await dbp.query(
+      'select user_id from team_members where team_id = ?',
+      [team_id]
+    );
+
+    if (!members.length) {
+      return res.status(400).json({ message: 'No members found in this team' });
+    }
+
+    const memberIds = members.map(x => x.user_id);
+    const placeholders = memberIds.map(() => '?').join(',');
+
+    if (Number(event.available_seats) < memberIds.length) {
+      return res.status(400).json({ message: 'Not enough seats available for the whole team' });
+    }
+
+    const [existingRegs] = await dbp.query(
+      `select * from registrations where event_id = ? and user_id in (${placeholders})`,
+      [event_id, ...memberIds]
+    );
+
+    if (existingRegs.length > 0) {
+      return res.status(400).json({ message: 'One or more team members are already registered or waitlisted for this event' });
+    }
+
+    await dbp.beginTransaction();
+
+    try {
+      for (const memberId of memberIds) {
+        await dbp.query(
+          'insert into registrations (user_id, event_id, status) values (?, ?, ?)',
+          [memberId, event_id, 'registered']
+        );
+      }
+
+      await dbp.query(
+        'update events set available_seats = available_seats - ? where id = ?',
+        [memberIds.length, event_id]
+      );
+
+      await dbp.commit();
+      return res.json({ message: 'Team registered successfully for the event' });
+    } catch (err2) {
+      await dbp.rollback();
+      return res.status(500).json({ message: 'Team registration failed' });
+    }
+  } catch (err) {
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+
 
 app.get('/my-registrations/:userId', (req, res) => {
   const sql = `
@@ -547,13 +617,13 @@ app.get('/admin/teams-summary', (req, res) => {
     select
       t.id,
       t.team_name,
-      e.name as event_name,
+      leader.username as leader_name,
       group_concat(u.email order by u.email separator ', ') as members
     from teams t
-    join events e on t.event_id = e.id
+    join users leader on leader.id = t.leader_user_id
     join team_members tm on tm.team_id = t.id
     join users u on u.id = tm.user_id
-    group by t.id, t.team_name, e.name
+    group by t.id, t.team_name, leader.username
     order by t.id desc
   `;
 

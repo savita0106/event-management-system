@@ -21,11 +21,30 @@
   </header>
 
   <main class="page">
-    <h1 class="page-title">My Teams</h1>
-    <p class="subtext">Teams you created or joined</p>
+  <h1 class="page-title">My Teams</h1>
+  <p class="subtext">Create teams and use them while registering for events</p>
 
+  <section class="panel">
+    <h2 style="margin-bottom:16px;">Create Team</h2>
+
+    <form id="teamForm">
+      <label>Team Name</label>
+      <input id="teamName" type="text" placeholder="Enter team name" required>
+
+      <label>Total Members in Team</label>
+      <input id="teamSize" type="number" min="2" max="5" placeholder="2 to 5" required>
+
+      <div id="teamEmailsWrap" style="margin-top:14px;"></div>
+
+      <button id="createTeamBtn" type="submit">Create Team</button>
+      <p id="teamMsg" class="empty" style="margin-top:10px;"></p>
+    </form>
+  </section>
+
+  <section style="margin-top:24px;">
     <div id="myTeamsGrid" class="grid"></div>
     <p id="emptyTeamsMsg" class="empty">No teams found.</p>
-  </main>
+  </section>
+</main>
 </body>
 </html>

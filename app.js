@@ -111,15 +111,16 @@ function initSignup() {
     e.preventDefault();
 
     const username = ($('username').value || '').trim();
-    const password = $('password').value || '';
-    const msg = $('msg');
+const email = (($('email') && $('email').value) || '').trim().toLowerCase();
+const password = $('password').value || '';
+const msg = $('msg');
 
-    try {
-      const res = await fetch(`${API_BASE}/signup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password, role })
-      });
+try {
+  const res = await fetch(`${API_BASE}/signup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, email, password, role })
+  });
 
       const data = await res.json();
 
@@ -196,13 +197,13 @@ async function renderEvents() {
       `;
 
       if (session.role === 'user') {
-        extra += `
-          <div class="team-actions">
-            <button class="btn-small" onclick="registerIndividual(${ev.id})">Register Individually</button>
-            <button class="btn-small" onclick="showTeamRegistrationPrompt(${ev.id})">Register as Team</button>
-          </div>
-        `;
-      }
+  extra += `
+    <div class="team-actions">
+      <button class="btn-small" onclick="registerIndividual(${ev.id})">Register Individually</button>
+      <button class="btn-small" onclick="selectTeamForEvent(${ev.id})">Register as Team</button>
+    </div>
+  `;
+}
 
       card.innerHTML = `<h3>${ev.name || ''}</h3>${extra}`;
       grid.appendChild(card);
@@ -382,64 +383,6 @@ async function registerIndividual(eventId) {
     renderEvents();
   } catch (err) {
     alert('Registration failed');
-  }
-}
-
-function showTeamRegistrationPrompt(eventId) {
-  const session = getSession();
-  if (!session || session.role !== 'user') return;
-
-  const teamName = prompt('Enter team name');
-  if (!teamName || !teamName.trim()) return;
-
-  const totalMembersInput = prompt('Enter number of other members only (max 4)');
-  if (!totalMembersInput) return;
-
-  const otherCount = parseInt(totalMembersInput, 10);
-
-if (isNaN(otherCount) || otherCount < 1 || otherCount > 4) {
-  alert('Other members count must be between 1 and 4');
-  return;
-}
-
-const memberEmails = [];
-
-for (let i = 1; i <= otherCount; i++) {
-  const email = prompt(`Enter email ID of member ${i}`);
-  if (!email || !email.trim()) {
-    alert('Email ID is required');
-    return;
-  }
-  memberEmails.push(email.trim());
-}
-
-registerAsTeam(eventId, teamName.trim(), memberEmails);
-}
-
-async function registerAsTeam(eventId, teamName, memberEmails) {
-  const session = getSession();
-  if (!session || session.role !== 'user') {
-    alert('Please login as user');
-    return;
-  }
-
-  try {
-    const res = await fetch(`${API_BASE}/register-team`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-  event_id: eventId,
-  team_name: teamName,
-  leader_user_id: session.id,
-  member_emails: memberEmails
-})
-    });
-
-    const data = await res.json();
-    alert(data.message || 'Done');
-    renderEvents();
-  } catch (err) {
-    alert('Team registration failed');
   }
 }
 
@@ -656,7 +599,7 @@ async function renderManageTeams() {
       card.className = 'card';
       card.innerHTML = `
         <h3>${team.team_name}</h3>
-        <p><b>Event:</b> ${team.event_name}</p>
+        <p><b>Leader:</b> ${team.leader_name}</p>
         <p><b>Users:</b> ${team.members || ''}</p>
       `;
       wrap.appendChild(card);
@@ -810,6 +753,204 @@ function initAnalytics() {
   renderAnalytics();
 }
 
+function renderTeamEmailInputs() {
+  const wrap = $('teamEmailsWrap');
+  const teamSize = parseInt(($('teamSize') && $('teamSize').value) || '0', 10);
+
+  if (!wrap) return;
+  wrap.innerHTML = '';
+
+  if (isNaN(teamSize) || teamSize < 2 || teamSize > 5) return;
+
+  const otherCount = teamSize - 1;
+
+  for (let i = 1; i <= otherCount; i++) {
+    const label = document.createElement('label');
+    label.textContent = `Member ${i} Email`;
+
+    const input = document.createElement('input');
+    input.type = 'email';
+    input.placeholder = `Enter member ${i} email id`;
+    input.className = 'team-email-input';
+    input.required = true;
+
+    wrap.appendChild(label);
+    wrap.appendChild(input);
+  }
+}
+
+async function createTeam(e) {
+  e.preventDefault();
+
+  const session = requireLogin();
+  if (!session) return;
+  if (session.role !== 'user') {
+    location.href = 'view-events.html';
+    return;
+  }
+
+  const teamName = (($('teamName') && $('teamName').value) || '').trim();
+  const teamSize = parseInt((($('teamSize') && $('teamSize').value) || '0'), 10);
+  const msg = $('teamMsg');
+
+  if (msg) msg.textContent = '';
+
+  if (!teamName) {
+    if (msg) msg.textContent = 'Team name is required';
+    return;
+  }
+
+  if (isNaN(teamSize) || teamSize < 2 || teamSize > 5) {
+    if (msg) msg.textContent = 'Team size must be between 2 and 5';
+    return;
+  }
+
+  const emailInputs = document.querySelectorAll('.team-email-input');
+  const memberEmails = Array.from(emailInputs).map(x => (x.value || '').trim().toLowerCase()).filter(Boolean);
+
+  if (memberEmails.length !== teamSize - 1) {
+    if (msg) msg.textContent = 'Enter all member email ids';
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/teams`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        team_name: teamName,
+        leader_user_id: session.id,
+        member_emails: memberEmails
+      })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (msg) msg.textContent = data.message || 'Team creation failed';
+      return;
+    }
+
+    if (msg) msg.textContent = data.message || 'Team created successfully';
+
+    $('teamForm').reset();
+    if ($('teamEmailsWrap')) $('teamEmailsWrap').innerHTML = '';
+    renderMyTeams();
+  } catch (err) {
+    if (msg) msg.textContent = 'Server error';
+  }
+}
+
+async function renderMyTeams() {
+  const session = requireLogin();
+  if (!session) return;
+  if (session.role !== 'user') {
+    location.href = 'view-events.html';
+    return;
+  }
+
+  const wrap = $('myTeamsGrid');
+  const empty = $('emptyTeamsMsg');
+  if (!wrap || !empty) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/my-teams/${session.id}`);
+    const list = await res.json();
+
+    wrap.innerHTML = '';
+
+    if (!list.length) {
+      empty.style.display = 'block';
+      empty.textContent = 'No teams found.';
+      return;
+    }
+
+    empty.style.display = 'none';
+
+    list.forEach(function (team) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <h3>${team.team_name}</h3>
+        <p><b>Leader:</b> ${team.leader_name}</p>
+        <p><b>Members:</b> ${team.members}</p>
+        <p><b>Total Members:</b> ${team.member_count}</p>
+      `;
+      wrap.appendChild(card);
+    });
+  } catch (err) {
+    empty.style.display = 'block';
+    empty.textContent = 'Failed to load teams.';
+  }
+}
+
+function initMyTeams() {
+  const form = $('teamForm');
+  if (!form) return;
+
+  const session = requireLogin();
+  if (!session) return;
+  if (session.role !== 'user') {
+    location.href = 'view-events.html';
+    return;
+  }
+
+  const teamSize = $('teamSize');
+  if (teamSize) {
+    teamSize.addEventListener('input', renderTeamEmailInputs);
+  }
+
+  form.addEventListener('submit', createTeam);
+  renderMyTeams();
+}
+
+async function selectTeamForEvent(eventId) {
+  const session = requireLogin();
+  if (!session) return;
+  if (session.role !== 'user') return;
+
+  try {
+    const res = await fetch(`${API_BASE}/my-teams/${session.id}`);
+    const teams = await res.json();
+
+    if (!teams.length) {
+      alert('No teams created yet');
+      return;
+    }
+
+    const optionsText = teams.map((t, i) => `${i + 1}. ${t.team_name} (${t.member_count} members)`).join('\n');
+    const pick = prompt(`Select team number:\n\n${optionsText}`);
+
+    if (!pick) return;
+
+    const index = parseInt(pick, 10) - 1;
+    if (isNaN(index) || index < 0 || index >= teams.length) {
+      alert('Invalid selection');
+      return;
+    }
+
+    const selectedTeam = teams[index];
+
+    const regRes = await fetch(`${API_BASE}/register-team-to-event`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event_id: eventId,
+        team_id: selectedTeam.id
+      })
+    });
+
+    const data = await regRes.json();
+    alert(data.message || 'Done');
+
+    if (regRes.ok) {
+      renderEvents();
+    }
+  } catch (err) {
+    alert('Team registration failed');
+  }
+}
+
 document.addEventListener('DOMContentLoaded', function () {
   initLogout();
   initLogin();
@@ -821,6 +962,7 @@ document.addEventListener('DOMContentLoaded', function () {
   initManageAttendees();
   initManageTeams();
   initAnalytics();
+  initMyTeams();
 });
 
 window.renderEvents = renderEvents;
@@ -829,8 +971,5 @@ window.deleteEvent = deleteEvent;
 window.cancelRegistration = cancelRegistration;
 window.loadAttendees = loadAttendees;
 
-
-window.registerAsTeam = registerAsTeam;
-
 window.registerIndividual = registerIndividual;
-window.showTeamRegistrationPrompt = showTeamRegistrationPrompt;
+window.selectTeamForEvent = selectTeamForEvent;
