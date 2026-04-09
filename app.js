@@ -500,15 +500,8 @@ async function loadAttendees(eventId, eventName) {
   const title = $('selectedEventTitle');
   const listWrap = $('attendeeGrid');
   const empty = $('attendeeEmpty');
-  const promoteBtn = $('promoteBtn');
 
   if (title) title.textContent = 'Attendees - ' + eventName;
-  if (promoteBtn) {
-    promoteBtn.style.display = 'inline-block';
-    promoteBtn.onclick = function () {
-      promoteWaitlist(eventId);
-    };
-  }
 
   try {
     const res = await fetch(`${API_BASE}/admin/attendees/${eventId}`);
